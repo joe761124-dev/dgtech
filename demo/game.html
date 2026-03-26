@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>怪獸出沒：搖晃大冒險 v0.1</title>
+    <style>
+        :root { --primary: #2ecc71; --danger: #e74c3c; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #333; font-family: sans-serif; }
+        
+        /* 地圖容器 */
+        #game-container { position: relative; width: 100%; height: 100%; background: #222; overflow: hidden; }
+        #map-grid { 
+            width: 3000px; height: 3000px; 
+            background-image: radial-gradient(#444 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform-origin: 0 0;
+            transition: transform 0.1s ease-out;
+        }
+
+        /* 戰鬥介面 */
+        #battle-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            z-index: 100; color: white; text-align: center;
+        }
+        #monster { width: 200px; height: 200px; background: var(--danger); border-radius: 50%; margin: 20px; transition: transform 0.1s; box-shadow: 0 0 50px var(--danger); }
+        #hp-bar { width: 80%; height: 20px; background: #555; border-radius: 10px; overflow: hidden; margin: 20px; }
+        #hp-fill { width: 100%; height: 100%; background: var(--primary); transition: width 0.2s; }
+
+        /* UI */
+        #ui { position: absolute; top: 20px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; pointer-events: none; }
+        .version { position: absolute; bottom: 10px; right: 10px; color: #777; font-size: 12px; }
+        #sensor-btn { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 15px 30px; background: var(--primary); color: white; border: none; border-radius: 30px; font-size: 18px; z-index: 200; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<button id="sensor-btn">點擊開始遊戲 (授權感測器)</button>
+
+<div id="game-container">
+    <div id="map-grid"></div>
+    <div id="ui">步數計數: <span id="steps">0</span> / 3</div>
+</div>
+
+<div id="battle-overlay">
+    <h2>警告！怪物出現！</h2>
+    <p>快速搖晃手機或點擊怪物打敗它！</p>
+    <div id="monster"></div>
+    <div id="hp-bar"><div id="hp-fill"></div></div>
+</div>
+
+<div class="version">Version: v0.1</div>
+
+<script>
+    const map = document.getElementById('map-grid');
+    const battleOverlay = document.getElementById('battle-overlay');
+    const hpFill = document.getElementById('hp-fill');
+    const stepsText = document.getElementById('steps');
+    const sensorBtn = document.getElementById('sensor-btn');
+    const monster = document.getElementById('monster');
+
+    let scale = 1, offsetX = -1000, offsetY = -1000;
+    let stepCount = 0;
+    let totalDist = 0;
+    let inBattle = false;
+    let monsterHP = 100;
+
+    // 更新地圖位置
+    function updateMap() {
+        map.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    }
+    updateMap();
+
+    // 縮放與拖曳邏輯
+    let isDragging = false, lastX, lastY;
+    let lastDist = 0;
+
+    window.addEventListener('wheel', (e) => {
+        scale += e.deltaY * -0.001;
+        scale = Math.min(Math.max(0.3, scale), 2);
+        updateMap();
+    });
+
+    const startAction = (x, y) => { 
+        if(inBattle) return;
+        isDragging = true; lastX = x; lastY = y; 
+    };
+    const moveAction = (x, y) => {
+        if (!isDragging || inBattle) return;
+        let dx = x - lastX;
+        let dy = y - lastY;
+        offsetX += dx;
+        offsetY += dy;
+        
+        // 模擬步數計算
+        let moveDist = Math.hypot(dx, dy);
+        totalDist += moveDist;
+        if(totalDist > 150) { 
+            stepCount++;
+            totalDist = 0;
+            stepsText.innerText = stepCount;
+            if(stepCount >= 3) triggerBattle();
+        }
+        
+        lastX = x; lastY = y;
+        updateMap();
+    };
+
+    window.addEventListener('mousedown', e => startAction(e.clientX, e.clientY));
+    window.addEventListener('mousemove', e => moveAction(e.clientX, e.clientY));
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    window.addEventListener('touchstart', e => {
+        if(e.touches.length === 1) startAction(e.touches[0].clientX, e.touches[0].clientY);
+        else if(e.touches.length === 2) lastDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+    });
+    window.addEventListener('touchmove', e => {
+        if(e.touches.length === 1) moveAction(e.touches[0].clientX, e.touches[0].clientY);
+        else if(e.touches.length === 2) {
+            let d = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            scale *= d / lastDist;
+            lastDist = d;
+            updateMap();
+        }
+    });
+
+    // 戰鬥邏輯
+    function triggerBattle() {
+        inBattle = true;
+        stepCount = 0;
+        stepsText.innerText = 0;
+        monsterHP = 100;
+        hpFill.style.width = '100%';
+        battleOverlay.style.display = 'flex';
+    }
+
+    function attack(power) {
+        if(!inBattle) return;
+        monsterHP -= power;
+        hpFill.style.width = monsterHP + '%';
+        monster.style.transform = 'scale(0.9)';
+        setTimeout(() => monster.style.transform = 'scale(1)', 50);
+        
+        if(monsterHP <= 0) {
+            inBattle = false;
+            battleOverlay.style.display = 'none';
+            alert("怪物被擊敗了！繼續探索吧。");
+        }
+    }
+
+    monster.addEventListener('click', () => attack(10));
+
+    // 搖晃偵測
+    sensorBtn.onclick = () => {
+        sensorBtn.style.display = 'none';
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission().then(state => {
+                if (state === 'granted') window.addEventListener('devicemotion', handleShake);
+            });
+        } else {
+            window.addEventListener('devicemotion', handleShake);
+        }
+    };
+
+    let lastShake = 0;
+    function handleShake(event) {
+        if(!inBattle) return;
+        let acc = event.accelerationIncludingGravity;
+        let totalAcc = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
+        if (totalAcc > 25) { // 搖晃閥值
+            let now = Date.now();
+            if(now - lastShake > 100) {
+                attack(15);
+                lastShake = now;
+            }
+        }
+    }
+</script>
+</body>
+</html>
