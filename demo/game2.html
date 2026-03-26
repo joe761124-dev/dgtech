@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GPS 獵獸傳說 v0.1</title>
+    <style>
+        :root { --main-green: #27ae60; --monster-red: #c0392b; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #1a1a1a; font-family: -apple-system, sans-serif; }
+        
+        /* 地圖層 */
+        #map-container { position: absolute; width: 100%; height: 100%; cursor: grab; background: #2c3e50; }
+        #grid-bg { 
+            width: 5000px; height: 5000px; 
+            background-image: linear-gradient(#34495e 1px, transparent 1px), linear-gradient(90deg, #34495e 1px, transparent 1px);
+            background-size: 100px 100px;
+            transform-origin: 0 0;
+        }
+
+        /* 戰鬥介面 */
+        #battle-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, #450606 0%, #000 100%);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000; color: white;
+        }
+        #monster-sprite {
+            width: 180px; height: 180px; background: var(--monster-red);
+            border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+            box-shadow: 0 0 60px var(--monster-red);
+            animation: float 2s infinite ease-in-out;
+            margin: 30px;
+        }
+        @keyframes float { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-20px) scale(1.05); } }
+        
+        #hp-container { width: 70%; height: 15px; background: #333; border-radius: 10px; border: 2px solid #fff; }
+        #hp-bar { width: 100%; height: 100%; background: #2ecc71; transition: width 0.1s; }
+
+        /* UI 資訊 */
+        #hud { position: absolute; top: 20px; left: 20px; z-index: 50; color: white; background: rgba(0,0,0,0.6); padding: 15px; border-radius: 12px; pointer-events: none; }
+        #start-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        #start-btn { padding: 20px 40px; font-size: 20px; background: var(--main-green); color: white; border: none; border-radius: 50px; cursor: pointer; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .v-tag { position: absolute; bottom: 10px; right: 10px; color: #555; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="start-overlay">
+    <button id="start-btn">啟動 GPS 冒險探險 (需授權)</button>
+</div>
+
+<div id="hud">
+    <div>探測狀態: <span id="gps-status">等待中...</span></div>
+    <div style="font-size: 24px; margin-top: 5px;">累積步數: <span id="step-count">
