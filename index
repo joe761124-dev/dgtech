@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">
+  <defs>
+    <style>
+      .bg { fill: #f4f7f6; }
+      .card { fill: #ffffff; stroke: #d1d9e6; stroke-width: 2; rx: 12; cursor: pointer; transition: all 0.3s ease; }
+      .card:hover { fill: #eef5fb; stroke: #3498db; transform: translateY(-5px); }
+      .title { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 32px; font-weight: bold; fill: #2c3e50; }
+      .subtitle { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 16px; fill: #7f8c8d; }
+      .section-title { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 24px; font-weight: bold; fill: #34495e; }
+      .card-title { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 20px; font-weight: bold; fill: #2980b9; }
+      .card-text { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 15px; fill: #555555; }
+      .bold-text { font-weight: bold; fill: #2c3e50; }
+      .tag-save-effort { fill: #f39c12; rx: 6; }
+      .tag-change-dir { fill: #27ae60; rx: 6; }
+      .tag-text { font-family: 'Microsoft JhengHei', 'PingFang TC', sans-serif; font-size: 13px; fill: white; font-weight: bold; }
+    </style>
+  </defs>
+
+  <!-- 背景與標題 -->
+  <rect width="1000" height="700" class="bg" />
+  <text x="500" y="60" class="title" text-anchor="middle">力與運動：互動探索實驗室</text>
+  <text x="500" y="90" class="subtitle" text-anchor="middle">點擊各圖卡探索簡單機械原理與自然界的作用力</text>
+
+  <!-- 上半部：簡單機械 -->
+  <text x="50" y="140" class="section-title">一、簡單機械模組 (Simple Machines)</text>
+  
+  <!-- 槓桿 -->
+  <g transform="translate(50, 160)">
+    <rect width="210" height="150" class="card" />
+    <text x="105" y="35" class="card-title" text-anchor="middle">槓桿</text>
+    <text x="15" y="65" class="card-text">透過改變支點、施力點</text>
+    <text x="15" y="85" class="card-text">與抗力點的位置來作功。</text>
+    <rect x="15" y="110" width="50" height="24" class="tag-save-effort"/>
+    <text x="23" y="127" class="tag-text">省力</text>
+    <rect x="75" y="110" width="80" height="24" class="tag-change-dir"/>
+    <text x="83" y="127" class="tag-text">改變方向</text>
+  </g>
+
+  <!-- 滑輪 -->
+  <g transform="translate(280, 160)">
+    <rect width="210" height="150" class="card" />
+    <text x="105" y="35" class="card-title" text-anchor="middle">滑輪</text>
+    <text x="15" y="65" class="card-text">動滑輪具有省力效果；</text>
+    <text x="15" y="85" class="card-text">定滑輪能改變作用力方向。</text>
+    <rect x="15" y="110" width="50" height="24" class="tag-save-effort"/>
+    <text x="23" y="127" class="tag-text">省力</text>
+    <rect x="75" y="110" width="80" height="24" class="tag-change-dir"/>
+    <text x="83" y="127" class="tag-text">改變方向</text>
+  </g>
+
+  <!-- 輪軸 -->
+  <g transform="translate(510, 160)">
+    <rect width="210" height="150" class="card" />
+    <text x="105" y="35" class="card-title" text-anchor="middle">輪軸</text>
+    <text x="15" y="65" class="card-text">由輪與軸組成，將力</text>
+    <text x="15" y="85" class="card-text">作用於大輪時可省力。</text>
+    <rect x="15" y="110" width="50" height="24" class="tag-save-effort"/>
+    <text x="23" y="127" class="tag-text">省力</text>
+  </g>
+
+  <!-- 斜面 -->
+  <g transform="translate(740, 160)">
+    <rect width="210" height="150" class="card" />
+    <text x="105" y="35" class="card-title" text-anchor="middle">斜面</text>
+    <text x="15" y="65" class="card-text">利用傾斜平面抬升物體，</text>
+    <text x="15" y="85" class="card-text">斜面角度越小越省力。</text>
+    <rect x="15" y="110" width="50" height="24" class="tag-save-effort"/>
+    <text x="23" y="127" class="tag-text">省力</text>
+  </g>
+
+  <!-- 下半部：力學現象 -->
+  <text x="50" y="370" class="section-title">二、生活中的力與運動 (Forces &amp; Motion)</text>
+
+  <!-- 摩擦力 -->
+  <g transform="translate(50, 390)">
+    <rect width="280" height="200" class="card" />
+    <text x="140" y="40" class="card-title" text-anchor="middle">摩擦力 (Friction)</text>
+    <text x="15" y="75" class="card-text">阻礙物體相對運動的作用力。</text>
+    <text x="15" y="105" class="card-text bold-text">▍靜摩擦力：</text>
+    <text x="15" y="125" class="card-text">受力但物體保持靜止時的摩擦力。</text>
+    <text x="15" y="155" class="card-text bold-text">▍動摩擦力：</text>
+    <text x="15" y="175" class="card-text">物體處於滑動狀態時受到的阻力。</text>
+  </g>
+
+  <!-- 浮力 -->
+  <g transform="translate(350, 390)">
+    <rect width="280" height="200" class="card" />
+    <text x="140" y="40" class="card-title" text-anchor="middle">浮力 (Buoyancy)</text>
+    <text x="15" y="75" class="card-text">流體對浸入其中的物體產生的向上力。</text>
+    <text x="15" y="105" class="card-text bold-text">▍阿基米德原理：</text>
+    <text x="15" y="130" class="card-text">物體在靜止液體中所受到的浮力，</text>
+    <text x="15" y="155" class="card-text">剛好等於其所「排開液體的重量」。</text>
+  </g>
+
+  <!-- 向心力 -->
+  <g transform="translate(650, 390)">
+    <rect width="300" height="200" class="card" />
+    <text x="150" y="40" class="card-title" text-anchor="middle">向心力與圓周運動</text>
+    <text x="15" y="75" class="card-text">圓周運動是一種加速度運動。</text>
+    <text x="15" y="105" class="card-text bold-text">▍等速圓周運動：</text>
+    <text x="15" y="130" class="card-text">質點的速率與角速度不變，但因為</text>
+    <text x="15" y="150" class="card-text">具有向心加速度，所以速度方向</text>
+    <text x="15" y="170" class="card-text">會不斷改變，需要向心力維持。</text>
+  </g>
+
+  <!-- 頁腳註解 -->
+  <text x="500" y="650" class="subtitle" text-anchor="middle">註：簡單機械具有省力、省時或改變作用力方向等功能 (自然科學領域課綱 Eb-Ⅳ-4, Eb-Ⅳ-6, Eb-Ⅳ-7, Eb-Ⅳ-9, PEb-Ⅴa-6)</text>
+</svg>
