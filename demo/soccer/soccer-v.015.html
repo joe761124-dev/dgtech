@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>FAI Drone Soccer 3v3 Simulator v0.15 (Mobile View Fixed)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        #scoreboard { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); color: white; padding: 15px 30px; border-radius: 12px; text-align: center; font-size: 22px; border: 2px solid #444; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        #timer { font-size: 28px; font-weight: bold; color: #ffcc00; margin-bottom: 8px; letter-spacing: 2px; }
+        #status-msg { position: absolute; top: 110px; width: 100%; text-align: center; font-size: 26px; font-weight: bold; text-shadow: 2px 2px 4px black; transition: opacity 0.5s; }
+        
+        /* 虛擬搖桿 - 美國手 (Mode 2) */
+        .joystick-zone { position: absolute; bottom: 30px; width: 130px; height: 130px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
+        #joystick-left { left: 20px; }
+        #joystick-right { right: 20px; }
+        .stick { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        #controls-hint { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); color: #ccc; font-size: 14px; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 6px; }
+        #mode-label { position: absolute; bottom: 170px; left: 20px; color: #aaa; font-size: 12px; display: none;}
+        #mode-label-r { position: absolute; bottom: 170px; right: 20px; color: #aaa; font-size: 12px; display: none;}
+
+        /* 手機版適應 */
+        @media (max-width: 768px) {
+            .joystick-zone { display: block; }
+            #controls-hint { display: none; }
+            #mode-label { display: block; }
+            #mode-label-r { display: block; }
+            #scoreboard { width: 80%; padding: 10px; font-size: 18px; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="ui-layer">
+    <div id="scoreboard">
+        <div id="timer">03:00</div>
+        <span style="color: #4488ff; font-weight:bold;">BLUE: <span id="score-blue">0</span></span> &nbsp;|&nbsp; 
+        <span style="color: #ff4444; font-weight:bold;">RED: <span id="score-red">0</span></span>
+    </div>
+    <div id="status-msg"></div>
+    <div id="controls-hint">美國手 (Mode 2) - 右手WASD (俯仰/滾轉) | 左手方向鍵 (油門/偏航) | 綠色方塊為機尾</div>
+    
+    <!-- 左搖桿：油門(上下)、偏航(左右) -->
+    <div id="mode-label">油門 / 偏航</div>
+    <div id="joystick-left" class="joystick-zone"><div class="stick" id="stick-left"></div></div>
+    
+    <!-- 右搖桿：俯仰(上下)、滾轉(左右) -->
+    <div id="mode-label-r">俯仰 / 滾轉</div>
+    <div id="joystick-right" class="joystick-zone"><div class="stick" id="stick-right"></div></div>
+</div>
+
+<script>
+    // --- 遊戲狀態 ---
+    let scoreBlue = 0, scoreRed = 0;
+    let timeLeft = 180;
+    let gameOver = false;
+    let teamState = { blue: { canScore: true, msgShown: false }, red: { canScore: true, msgShown: false } };
+
+    // --- Three.js 基礎設定 ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // --- 核心修正：動態視角系統 (針對手機直向/橫向自適應) ---
+    function updateCameraView() {
+        if (window.innerWidth < window.innerHeight) {
+            // 手機直向 (Portrait) - 加大視野並退後，確保能看見左右邊界與球門
+            camera.fov = 100; 
+            camera.position.set(-6.5, 3.5, 0); // 嚴格鎖定在藍隊端線外 (X < -3 的操縱區)
+        } else {
+            // 電腦或手機橫向 (Landscape)
+            camera.fov = 60;
+            camera.position.set(-5.0, 2.5, 0);
+        }
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        camera.lookAt(new THREE.Vector3(0, 1.5, 0)); // 視線永遠筆直看向場地正中央
+    }
+    // 初始化視角
+    updateCameraView();
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
+
+    // --- 場地建置 (6m x 3m x 3m) ---
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), new THREE.MeshLambertMaterial({ color: 0x2d4a22 }));
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    const gridHelper = new THREE.GridHelper(6, 6, 0xffffff, 0x555555);
+    gridHelper.scale.set(1, 1, 0.5);
+    scene.add(gridHelper);
+
+    const centerLine = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 3), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    centerLine.rotation.x = -Math.PI / 2; centerLine.position.y = 0.01;
+    scene.add(centerLine);
+
+    const cage = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 3), new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true, transparent: true, opacity: 0.15 }));
+    cage.position.y = 1.5; scene.add(cage);
+
+    function createGoal(xPos, color) {
+        const goal = new THREE.Mesh(new THREE.TorusGeometry(0.25, 0.04, 16, 32), new THREE.MeshLambertMaterial({ color: color }));
+        goal.position.set(xPos, 2, 0); goal.rotation.y = Math.PI / 2; scene.add(goal);
+        return goal;
+    }
+    const goalRed = createGoal(2, 0xff4444);  
+    const goalBlue = createGoal(-2, 0x4488ff);
+
+    // --- 無人機建置 ---
+    const drones = [];
+    const droneRadius = 0.1;
+    
+    function createDrone(team, role, startPos) {
+        const droneGroup = new THREE.Group();
+        droneGroup.position.copy(startPos);
+        
+        const frameColor = team === 'blue' ? 0x4488ff : 0xff4444;
+        const cageMesh = new THREE.Mesh(new THREE.SphereGeometry(droneRadius, 16, 16), new THREE.MeshBasicMaterial({ color: frameColor, wireframe: true }));
+        droneGroup.add(cageMesh);
+        const coreMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.02, 8), new THREE.MeshLambertMaterial({ color: 0xdddddd }));
+        droneGroup.add(coreMesh);
+
+        if (role === 'striker') {
+            const strikerMark = new THREE.Mesh(new THREE.SphereGeometry(0.03), new THREE.MeshBasicMaterial({color: 0xffff00}));
+            strikerMark.position.y = 0.08; droneGroup.add(strikerMark);
+        }
+
+        // 機尾方向指示器 (綠色方塊)
+        const rearMark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), new THREE.MeshBasicMaterial({color: 0x00ff00}));
+        rearMark.position.set(-0.1, 0, 0); // Local -X 是後方
+        droneGroup.add(rearMark);
+
+        scene.add(droneGroup);
+        const droneObj = { 
+            mesh: droneGroup, team: team, role: role, 
+            vel: new THREE.Vector3(), mass: 1.0,
+            heading: (team === 'blue') ? 0 : Math.PI 
+        };
+        droneGroup.rotation.y = droneObj.heading;
+        drones.push(droneObj);
+        return droneObj;
+    }
+
+    const playerDrone = createDrone('blue', 'striker', new THREE.Vector3(-2.5, 0.5, 0));
+    createDrone('blue', 'defender', new THREE.Vector3(-1.6, 1.5, -0.6));
+    createDrone('blue', 'defender', new THREE.Vector3(-1.6, 1.5, 0.6));
+    const enemyStriker = createDrone('red', 'striker', new THREE.Vector3(2.5, 0.5, 0));
+    createDrone('red', 'defender', new THREE.Vector3(1.6, 1.5, -0.6));
+    createDrone('red', 'defender', new THREE.Vector3(1.6, 1.5, 0.6));
+
+    // --- 美國手 (Mode 2) 控制邏輯 ---
+    const keys = { w:false, a:false, s:false, d:false, up:false, down:false, left:false, right:false };
+    document.addEventListener('keydown', (e) => {
+        switch(e.code) {
+            case 'KeyW': keys.w = true; break; case 'KeyS': keys.s = true; break;       
+            case 'KeyA': keys.a = true; break; case 'KeyD': keys.d = true; break;       
+            case 'ArrowUp': keys.up = true; break; case 'ArrowDown': keys.down = true; break; 
+            case 'ArrowLeft': keys.left = true; break; case 'ArrowRight': keys.right = true; break; 
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        switch(e.code) {
+            case 'KeyW': keys.w = false; break; case 'KeyS': keys.s = false; break;
+            case 'KeyA': keys.a = false; break; case 'KeyD': keys.d = false; break;
+            case 'ArrowUp': keys.up = false; break; case 'ArrowDown': keys.down = false; break;
+            case 'ArrowLeft': keys.left = false; break; case 'ArrowRight': keys.right = false; break;
+        }
+    });
+
+    let joyL = { active: false, x: 0, y: 0, id: null, oX:0, oY:0 };
+    let joyR = { active: false, x: 0, y: 0, id: null, oX:0, oY:0 };
+    const stickL = document.getElementById('stick-left');
+    const stickR = document.getElementById('stick-right');
+
+    window.addEventListener('touchstart', (e) => {
+        if(gameOver) return;
+        for(let t of e.changedTouches) {
+            if(!joyL.active && t.clientX < window.innerWidth/2) {
+                joyL.active = true; joyL.id = t.identifier; joyL.oX = t.clientX; joyL.oY = t.clientY;
+            } else if(!joyR.active && t.clientX >= window.innerWidth/2) {
+                joyR.active = true; joyR.id = t.identifier; joyR.oX = t.clientX; joyR.oY = t.clientY;
+            }
+        }
+    }, {passive: false}); // 防止滑動螢幕捲動
+    
+    window.addEventListener('touchmove', (e) => {
+        e.preventDefault(); // 阻擋手機預設手勢
+        for(let t of e.changedTouches) {
+            let maxD = 40; 
+            if(joyL.active && t.identifier === joyL.id) {
+                let dx = t.clientX - joyL.oX; let dy = t.clientY - joyL.oY;
+                let dist = Math.min(Math.hypot(dx, dy), maxD); let ang = Math.atan2(dy, dx);
+                joyL.x = (dist * Math.cos(ang)) / maxD; joyL.y = (dist * Math.sin(ang)) / maxD;
+                stickL.style.transform = `translate(calc(-50% + ${joyL.x*maxD}px), calc(-50% + ${joyL.y*maxD}px))`;
+            }
+            if(joyR.active && t.identifier === joyR.id) {
+                let dx = t.clientX - joyR.oX; let dy = t.clientY - joyR.oY;
+                let dist = Math.min(Math.hypot(dx, dy), maxD); let ang = Math.atan2(dy, dx);
+                joyR.x = (dist * Math.cos(ang)) / maxD; joyR.y = (dist * Math.sin(ang)) / maxD;
+                stickR.style.transform = `translate(calc(-50% + ${joyR.x*maxD}px), calc(-50% + ${joyR.y*maxD}px))`;
+            }
+        }
+    }, {passive: false});
+    
+    const endTouch = (e) => {
+        for(let t of e.changedTouches) {
+            if(joyL.active && t.identifier === joyL.id) { joyL.active=false; joyL.x=0; joyL.y=0; stickL.style.transform='translate(-50%,-50%)'; }
+            if(joyR.active && t.identifier === joyR.id) { joyR.active=false; joyR.x=0; joyR.y=0; stickR.style.transform='translate(-50%,-50%)'; }
+        }
+    };
+    window.addEventListener('touchend', endTouch);
+    window.addEventListener('touchcancel', endTouch);
+
+    function showStatus(msg, color="#ffffff") {
+        const el = document.getElementById('status-msg');
+        el.innerText = msg; el.style.color = color; el.style.opacity = 1;
+        setTimeout(() => el.style.opacity = 0, 2500);
+    }
+
+    setInterval(() => {
+        if(timeLeft > 0 && !gameOver) {
+            timeLeft--;
+            let m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            let s = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timer').innerText = `${m}:${s}`;
+            if(timeLeft === 0) {
+                gameOver = true;
+                let msg = scoreBlue > scoreRed ? "BLUE WINS!" : (scoreRed > scoreBlue ? "RED WINS!" : "DRAW!");
+                showStatus("TIME UP! " + msg, "#ffff00");
+            }
+        }
+    }, 1000);
+
+    // --- 物理引擎核心參數 ---
+    const clock = new THREE.Clock();
+    const accel = 22.0;       
+    const friction = 0.90;    
+    const restitution = 1.2;  
+    const turnRate = 3.5;     
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if(gameOver) return renderer.render(scene, camera);
+        let dt = Math.min(clock.getDelta(), 0.05);
+
+        // 1. 玩家美國手 (Mode 2) 輸入處理
+        let pitchInput = 0, rollInput = 0, throttleInput = 0, yawInput = 0;
+        
+        if(keys.w) pitchInput += 1; if(keys.s) pitchInput -= 1; 
+        if(keys.a) rollInput -= 1;  if(keys.d) rollInput += 1;  
+        if(keys.up) throttleInput += 1; if(keys.down) throttleInput -= 1; 
+        if(keys.left) yawInput += 1; if(keys.right) yawInput -= 1; 
+
+        if(joyL.active) { yawInput -= joyL.x; throttleInput -= joyL.y; }
+        if(joyR.active) { rollInput += joyR.x; pitchInput -= joyR.y; }
+
+        playerDrone.heading += yawInput * turnRate * dt;
+        playerDrone.mesh.rotation.y = playerDrone.heading; 
+
+        let cosT = Math.cos(playerDrone.heading);
+        let sinT = Math.sin(playerDrone.heading);
+
+        let forceX = pitchInput * cosT - rollInput * sinT;
+        let forceZ = pitchInput * sinT + rollInput * cosT;
+
+        playerDrone.vel.x += forceX * accel * dt;
+        playerDrone.vel.z += forceZ * accel * dt;
+        playerDrone.vel.y += throttleInput * accel * dt;
+
+        if(!teamState.blue.canScore && playerDrone.mesh.position.x < 0) {
+            teamState.blue.canScore = true; showStatus("Blue Ready to Attack!", "#4488ff");
+        }
+        if(!teamState.red.canScore && enemyStriker.mesh.position.x > 0) { teamState.red.canScore = true; }
+
+        // 2. AI 電腦邏輯
+        drones.forEach(d => {
+            if(d === playerDrone) return;
+
+            let force = new THREE.Vector3();
+            force.y = (2.0 - d.mesh.position.y) * 4; 
+
+            if(d.team === 'red') {
+                if(d.role === 'striker') {
+                    if(!teamState.red.canScore) {
+                        force.x = (1.5 - d.mesh.position.x) * 4; 
+                    } else {
+                        let target = goalBlue.position.clone();
+                        force.add(target.sub(d.mesh.position).normalize().multiplyScalar(accel));
+                    }
+                } else {
+                    let distToPlayer = d.mesh.position.distanceTo(playerDrone.mesh.position);
+                    if (distToPlayer < 2.5 && playerDrone.mesh.position.x > -0.5) {
+                        let futurePos = playerDrone.mesh.position.clone().addScaledVector(playerDrone.vel, 0.3);
+                        let ramDir = futurePos.sub(d.mesh.position).normalize();
+                        force.add(ramDir.multiplyScalar(accel * 4.0)); 
+                    } else {
+                        force.x = (1.6 - d.mesh.position.x) * 10;
+                        force.y += (playerDrone.mesh.position.y - d.mesh.position.y) * 8;
+                        force.z += (playerDrone.mesh.position.z - d.mesh.position.z) * 8;
+                    }
+                }
+            } else if (d.team === 'blue') {
+                let distToEnemy = d.mesh.position.distanceTo(enemyStriker.mesh.position);
+                if (distToEnemy < 2.5 && enemyStriker.mesh.position.x < 0.5) {
+                    let futurePos = enemyStriker.mesh.position.clone().addScaledVector(enemyStriker.vel, 0.3);
+                    let ramDir = futurePos.sub(d.mesh.position).normalize();
+                    force.add(ramDir.multiplyScalar(accel * 4.0));
+                } else {
+                    force.x = (-1.6 - d.mesh.position.x) * 10; 
+                    force.y += (enemyStriker.mesh.position.y - d.mesh.position.y) * 8;
+                    force.z += (enemyStriker.mesh.position.z - d.mesh.position.z) * 8;
+                }
+            }
+
+            d.vel.addScaledVector(force, dt);
+            
+            if(force.lengthSq() > 1.0) {
+                let targetH = Math.atan2(force.z, force.x);
+                let diff = targetH - d.heading;
+                while(diff < -Math.PI) diff += Math.PI * 2; while(diff > Math.PI) diff -= Math.PI * 2;
+                d.heading += diff * 5.0 * dt;
+                d.mesh.rotation.y = d.heading;
+            }
+        });
+
+        // 3. 物理更新與真實衝撞反彈
+        drones.forEach(d => {
+            d.vel.multiplyScalar(friction); 
+            d.mesh.position.addScaledVector(d.vel, dt);
+
+            let r = droneRadius;
+            if(d.mesh.position.x > 3-r) { d.mesh.position.x = 3-r; d.vel.x *= -restitution; }
+            if(d.mesh.position.x < -3+r) { d.mesh.position.x = -3+r; d.vel.x *= -restitution; }
+            if(d.mesh.position.y > 3-r) { d.mesh.position.y = 3-r; d.vel.y *= -restitution; }
+            if(d.mesh.position.y < r) { d.mesh.position.y = r; d.vel.y *= -restitution; }
+            if(d.mesh.position.z > 1.5-r) { d.mesh.position.z = 1.5-r; d.vel.z *= -restitution; }
+            if(d.mesh.position.z < -1.5+r) { d.mesh.position.z = -1.5+r; d.vel.z *= -restitution; }
+        });
+
+        for(let i=0; i<drones.length; i++) {
+            for(let j=i+1; j<drones.length; j++) {
+                let d1 = drones[i]; let d2 = drones[j];
+                let delta = d1.mesh.position.clone().sub(d2.mesh.position);
+                let dist = delta.length();
+                
+                if(dist < droneRadius * 2) { 
+                    let n = delta.normalize();
+                    let relVel = d1.vel.clone().sub(d2.vel);
+                    let velAlongNormal = relVel.dot(n);
+                    
+                    if(velAlongNormal > 0) continue;
+
+                    let j_impulse = -(1 + restitution) * velAlongNormal / (1/d1.mass + 1/d2.mass);
+                    let impulseVec = n.clone().multiplyScalar(j_impulse);
+                    
+                    d1.vel.add(impulseVec.clone().multiplyScalar(1/d1.mass));
+                    d2.vel.sub(impulseVec.clone().multiplyScalar(1/d2.mass));
+
+                    let overlap = (droneRadius * 2) - dist;
+                    let correction = n.clone().multiplyScalar(overlap / 2);
+                    d1.mesh.position.add(correction);
+                    d2.mesh.position.sub(correction);
+                }
+            }
+        }
+
+        // 4. 得分判定
+        if(teamState.blue.canScore && playerDrone.mesh.position.x > 2.1 && playerDrone.mesh.position.distanceTo(goalRed.position) < 0.3) {
+            scoreBlue++; document.getElementById('score-blue').innerText = scoreBlue;
+            teamState.blue.canScore = false; showStatus("BLUE GOAL! Retreat to your half!", "#4488ff");
+        }
+        if(teamState.red.canScore && enemyStriker.mesh.position.x < -2.1 && enemyStriker.mesh.position.distanceTo(goalBlue.position) < 0.3) {
+            scoreRed++; document.getElementById('score-red').innerText = scoreRed;
+            teamState.red.canScore = false; showStatus("RED GOAL! Red is retreating!", "#ff4444");
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // 當螢幕翻轉或改變大小時，重新計算攝影機視角與位置
+    window.addEventListener('resize', () => {
+        updateCameraView();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
