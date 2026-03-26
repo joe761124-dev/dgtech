@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>力學互動教學 v0.1 - 單擺實驗</title>
+    <style>
+        :root { --bg: #f0f2f5; --panel: rgba(255, 255, 255, 0.9); }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: var(--bg); font-family: sans-serif; }
+        canvas { display: block; touch-action: none; cursor: crosshair; }
+        #ui { position: absolute; top: 20px; left: 20px; background: var(--panel); padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); pointer-events: none; }
+        .version { position: absolute; bottom: 10px; right: 10px; font-size: 12px; color: #888; }
+        .hint { font-size: 14px; color: #444; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div id="ui">
+    <strong style="font-size: 18px;">力學教學：單擺運動</strong>
+    <div id="data" class="hint">角度: 0° | 角速度: 0</div>
+    <div class="hint">操作：拖曳擺錘釋放 / 滾輪或雙指縮放</div>
+</div>
+<div class="version">Version: v0.1</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const dataDisplay = document.getElementById('data');
+
+    let width, height;
+    let scale = 1, offsetX = 0, offsetY = 0;
+    
+    // 物理參數
+    let angle = Math.PI / 4;
+    let aVel = 0, aAcc = 0;
+    let len = 200, gravity = 0.8, damping = 0.995;
+    let origin = { x: 0, y: 0 };
+    let bob = { x: 0, y: 0 };
+    let isDragging = false;
+
+    function init() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        origin.x = width / 2;
+        origin.y = height / 4;
+    }
+
+    // 交互邏輯
+    let lastDist = 0;
+    canvas.addEventListener('mousedown', startDrag);
+    canvas.addEventListener('mousemove', drag);
+    canvas.addEventListener('mouseup', endDrag);
+    canvas.addEventListener('wheel', handleWheel);
+    
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) startDrag(e.touches[0]);
+        else if (e.touches.length === 2) lastDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+    });
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1) drag(e.touches[0]);
+        else if (e.touches.length === 2) {
+            let dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            scale *= dist / lastDist;
+            lastDist = dist;
+        }
+    }, {passive: false});
+    canvas.addEventListener('touchend', endDrag);
+
+    function startDrag(e) {
+        let tx = (e.clientX - origin.x) / scale;
+        let ty = (e.clientY - origin.y) / scale;
+        if (Math.hypot(tx - bob.x, ty - bob.y) < 30) isDragging = true;
+    }
+
+    function drag(e) {
+        if (isDragging) {
+            let dx = (e.clientX - origin.x) / scale;
+            let dy = (e.clientY - origin.y) / scale;
+            angle = Math.atan2(dx, dy);
+            aVel = 0;
+        }
+    }
+
+    function endDrag() { isDragging = false; }
+
+    function handleWheel(e) {
+        scale += e.deltaY * -0.001;
+        scale = Math.min(Math.max(0.5, scale), 3);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.save();
+        ctx.translate(origin.x, origin.y);
+        ctx.scale(scale, scale);
+
+        if (!isDragging) {
+            aAcc = (-1 * gravity / len) * Math.sin(angle);
+            aVel += aAcc;
+            aVel *= damping;
+            angle += aVel;
+        }
+
+        bob.x = len * Math.sin(angle);
+        bob.y = len * Math.cos(angle);
+
+        // 繪製線
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(bob.x, bob.y);
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 繪製擺錘
+        ctx.beginPath();
+        ctx.arc(bob.x, bob.y, 20, 0, Math.PI * 2);
+        ctx.fillStyle = isDragging ? '#ff4757' : '#1e90ff';
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+
+        dataDisplay.innerText = `角度: ${(angle * 180 / Math.PI).toFixed(1)}° | 角速度: ${aVel.toFixed(3)}`;
+        requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', init);
+    init();
+    draw();
+</script>
+</body>
+</html>
