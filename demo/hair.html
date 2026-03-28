@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>互動髮型設計模擬 v0.1</title>
+    <style>
+        :root {
+            --primary: #ff6b6b;
+            --bg: #f8f9fa;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #app-container {
+            width: 100%;
+            max-width: 600px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        /* 畫布區域 */
+        #canvas-area {
+            flex: 1;
+            position: relative;
+            background: #ddd;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #user-photo {
+            max-width: 100%;
+            max-height: 100%;
+            pointer-events: none;
+            user-select: none;
+        }
+        #hair-overlay {
+            position: absolute;
+            width: 200px;
+            cursor: move;
+            transform-origin: center center;
+            touch-action: none;
+            filter: drop-shadow(0 5px 15px rgba(0,0,0,0.3));
+        }
+        /* 控制面板 */
+        #controls {
+            background: white;
+            padding: 15px;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -5px 15px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+            scrollbar-width: none;
+        }
+        .hair-btn {
+            flex: 0 0 60px;
+            height: 60px;
+            border: 2px solid #eee;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .hair-btn.active { border-color: var(--primary); }
+        
+        #chat-box {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-sizing: border-box;
+            margin-top: 10px;
+            resize: none;
+        }
+        .upload-label {
+            display: block;
+            text-align: center;
+            background: var(--primary);
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+        input[type="file"] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id-="app-container">
+    <div id="canvas-area">
+        <p id="placeholder-text">請先上傳大頭照</p>
+        <img id="user-photo" src="" alt="">
+        <img id="hair-overlay" src="https://cdn-icons-png.flaticon.com/512/1154/1154441.png" style="display:none;">
+    </div>
+
+    <div id="controls">
+        <label class="upload-label">
+            貼上/上傳個人照
+            <input type="file" id="upload-input" accept="image/*">
+        </label>
+
+        <div class="btn-group">
+            <button class="hair-btn" onclick="changeHair('https://cdn-icons-png.flaticon.com/512/1154/1154441.png')">短髮</button>
+            <button class="hair-btn" onclick="changeHair('https://cdn-icons-png.flaticon.com/512/1154/1154483.png')">長髮</button>
+            <button class="hair-btn" onclick="changeHair('https://cdn-icons-png.flaticon.com/512/1154/1154449.png')">捲髮</button>
+            <button class="hair-btn" onclick="changeHair('https://cdn-icons-png.flaticon.com/512/2800/2800412.png')">油頭</button>
+            <button class="hair-btn" onclick="changeHair('https://cdn-icons-png.flaticon.com/512/1154/1154452.png')">瀏海</button>
+        </div>
+
+        <textarea id="chat-box" rows="2" placeholder="輸入設計筆記或對話..."></textarea>
+    </div>
+</div>
+
+<script>
+    const hair = document.getElementById('hair-overlay');
+    const uploadInput = document.getElementById('upload-input');
+    const userPhoto = document.getElementById('user-photo');
+    const placeholder = document.getElementById('placeholder-text');
+
+    let scale = 1;
+    let rotation = 0;
+    let posX = 0;
+    let posY = 0;
+    let startDist = 0;
+
+    // 處理圖片上傳
+    uploadInput.onchange = function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                userPhoto.src = event.target.result;
+                placeholder.style.display = 'none';
+                hair.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    function changeHair(src) {
+        hair.src = src;
+        hair.style.display = 'block';
+    }
+
+    // 互動邏輯 (支援滑鼠與觸控)
+    let isDragging = false;
+    let lastX, lastY;
+
+    const start = (e) => {
+        isDragging = true;
+        const touch = e.touches ? e.touches[0] : e;
+        lastX = touch.clientX - posX;
+        lastY = touch.clientY - posY;
+        if (e.touches && e.touches.length === 2) {
+            startDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+        }
+    };
+
+    const move = (e) => {
+        if (!isDragging) return;
+        e.preventDefault();
+
+        if (e.touches && e.touches.length === 2) {
+            // 雙指縮放
+            const dist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            scale *= dist / startDist;
+            startDist = dist;
+        } else {
+            // 單指/滑鼠拖曳
+            const touch = e.touches ? e.touches[0] : e;
+            posX = touch.clientX - lastX;
+            posY = touch.clientY - lastY;
+        }
+        updateTransform();
+    };
+
+    const end = () => { isDragging = false; };
+
+    // 滾輪縮放 (電腦)
+    window.addEventListener('wheel', (e) => {
+        scale += e.deltaY * -0.001;
+        scale = Math.min(Math.max(0.1, scale), 5);
+        updateTransform();
+    }, { passive: false });
+
+    function updateTransform() {
+        hair.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+    }
+
+    hair.addEventListener('mousedown', start);
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', end);
+
+    hair.addEventListener('touchstart', start);
+    window.addEventListener('touchmove', move, { passive: false });
+    window.addEventListener('touchend', end);
+
+</script>
+
+</body>
+</html>
