@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>無人機足球 v0.24 (桌面純淨終極版)</title>
+    <title>無人機足球 v0.25 (難易度選擇版)</title>
     <style>
         /* --- 基礎設定 --- */
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #05050a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; user-select: none; }
@@ -19,7 +19,17 @@
         #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 10, 0.9); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .title { font-size: 60px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px;}
         .title span { color: #44ff44; }
-        .subtitle { font-size: 14px; color: rgba(255,255,255,0.6); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 40px; font-weight: bold; }
+        .subtitle { font-size: 14px; color: rgba(255,255,255,0.6); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 30px; font-weight: bold; }
+        
+        /* 難度選擇 UI */
+        .diff-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; pointer-events: auto; background: rgba(255,255,255,0.05); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        .diff-label { font-size: 14px; color: #aaa; font-weight: bold; letter-spacing: 1px; }
+        .btn-diff { background: transparent; color: #fff; border: 1px solid transparent; padding: 8px 16px; border-radius: 12px; font-size: 14px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        .btn-diff:hover { background: rgba(255,255,255,0.1); }
+        .btn-diff.active { background: #ffaa00; color: #000; box-shadow: 0 0 15px rgba(255,170,0,0.5); }
+        .btn-diff.active[data-level="easy"] { background: #44ff44; box-shadow: 0 0 15px rgba(68,255,68,0.5); }
+        .btn-diff.active[data-level="hard"] { background: #ff4444; box-shadow: 0 0 15px rgba(255,68,68,0.5); color: #fff;}
+
         .btn-3v3 { background: #fff; color: #000; font-size: 20px; padding: 18px 40px; border-radius: 12px; margin-bottom: 15px; width: 280px; position: relative; overflow: hidden; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
         .btn-3v3:hover { background: #44ff44; box-shadow: 0 0 20px #44ff44; }
         .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 18px; padding: 15px 40px; border-radius: 12px; width: 280px; }
@@ -82,7 +92,15 @@
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
         <div class="mobile-hint">提示：手機用戶請橫向擺放以獲得最佳體驗</div>
-        <div class="subtitle">v0.24 | 20cm 標準賽事 桌面純淨版</div>
+        <div class="subtitle">v0.25 | 新增 AI 難易度分級系統</div>
+        
+        <div class="diff-selector">
+            <span class="diff-label">防守難度：</span>
+            <button class="btn-diff" data-level="easy" onclick="setDifficulty('easy')">簡單</button>
+            <button class="btn-diff" data-level="medium" onclick="setDifficulty('medium')">普通</button>
+            <button class="btn-diff active" data-level="hard" onclick="setDifficulty('hard')">困難</button>
+        </div>
+
         <button class="btn btn-3v3" onclick="startGame('3v3')">3V3 競賽模式</button>
         <button class="btn btn-practice" onclick="startGame('practice')">單人練習模式</button>
     </div>
@@ -123,14 +141,13 @@
     </div>
 
 <script>
-    // --- 音效系統 (使用原生 Audio API，避免外部套件錯誤) ---
+    // --- 音效系統 ---
     const sfxScore = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3');
     const sfxHit = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-metal-hit-clank-2144.mp3');
     sfxScore.volume = 0.5;
     sfxHit.volume = 0.4;
 
     function playSound(audioObj) {
-        // 防止瀏覽器嚴格政策報錯
         if(audioObj.readyState >= 2) {
             audioObj.currentTime = 0;
             audioObj.play().catch(e => {});
@@ -146,19 +163,35 @@
     const GOAL_Y = 150; 
     const GOAL_X = PITCH.w / 2 - 100; 
 
+    // --- AI 難易度設定 ---
+    const DIFFICULTY_SETTINGS = {
+        'easy': { speedBase: 0.35, speedBurst: 0.5, sweepRange: 5, lerpFactor: 0.15 },
+        'medium': { speedBase: 0.45, speedBurst: 0.65, sweepRange: 15, lerpFactor: 0.25 },
+        'hard': { speedBase: 0.55, speedBurst: 0.8, sweepRange: 25, lerpFactor: 0.4 } // 原始預設
+    };
+    let currentDifficulty = 'hard';
+
+    // UI 切換難度
+    function setDifficulty(level) {
+        currentDifficulty = level;
+        document.querySelectorAll('.btn-diff').forEach(btn => {
+            if(btn.dataset.level === level) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+    }
+
     // --- 全域變數 ---
     const canvas = document.getElementById('game-canvas');
     let scene, camera, renderer, clock;
     let drones = [];
     let player = null;
     let gameMode = '3v3';
-    let gameState = 'menu'; // menu, playing, gameover
+    let gameState = 'menu'; 
     let timeLeft = 180;
     let score = { red: 0, blue: 0 };
     let animationFrameId;
     let gameTimerId;
 
-    // 輸入狀態
     const keys = { w:false, a:false, s:false, d:false, arrowup:false, arrowdown:false, arrowleft:false, arrowright:false };
     const joyLeft = { x: 0, y: 0 };
     const joyRight = { x: 0, y: 0 };
@@ -185,7 +218,6 @@
             this.group.position.copy(this.p);
             this.group.rotation.y = this.yaw;
 
-            // 防護罩
             const cageMat = new THREE.MeshStandardMaterial({ 
                 color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.8,
                 emissive: team === 'red' ? 0xaa0000 : 0x0000aa, emissiveIntensity: 0.5
@@ -193,7 +225,6 @@
             this.cageMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(this.radius, 2), cageMat);
             this.group.add(this.cageMesh);
 
-            // 核心
             const coreMat = new THREE.MeshStandardMaterial({ 
                 color: colorHex, emissive: colorHex, emissiveIntensity: 1.0, metalness: 0.8, roughness: 0.2
             });
@@ -214,7 +245,6 @@
                 this.group.add(ledMesh);
             }
 
-            // 攻擊手頂部標示燈
             if (role === 'striker') {
                 this.indicator = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
                 this.indicator.position.y = 13;
@@ -231,7 +261,6 @@
             this.v.multiplyScalar(this.friction);
             this.p.addScaledVector(this.v, dt);
 
-            // 邊界碰撞與硬直
             if (this.p.x - this.radius < -PITCH.w / 2) { this.p.x = -PITCH.w / 2 + this.radius; this.v.x *= -0.7; this.stunTimer = 0.1; }
             if (this.p.x + this.radius > PITCH.w / 2) { this.p.x = PITCH.w / 2 - this.radius; this.v.x *= -0.7; this.stunTimer = 0.1; }
             if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.7; this.stunTimer = 0.1; }
@@ -242,7 +271,6 @@
             this.group.position.copy(this.p);
             this.group.rotation.y = this.yaw;
 
-            // 視覺自轉特效
             if (this.v.length() > 5 && this.angularVelocity.lengthSq() < 1) {
                 const axis = new THREE.Vector3(this.v.z, 0, -this.v.x).normalize();
                 this.cageMesh.rotateOnWorldAxis(axis, this.v.length() * dt * 0.04);
@@ -254,14 +282,12 @@
                 this.angularVelocity.multiplyScalar(0.9);
             }
 
-            // 更新燈號
             if (this.indicator) {
                 this.indicator.material.color.setHex(this.needsReset ? 0x444444 : 0xffffff);
             }
         }
     }
 
-    // --- 初始化 Three.js 環境 ---
     function initThreeJS() {
         scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x05050a, 600, 2500);
@@ -272,15 +298,13 @@
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0x000000, 0); // 讓背景透明以露出 CSS 背景
+        renderer.setClearColor(0x000000, 0);
 
-        // 燈光
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
         const pointLight = new THREE.PointLight(0xffffff, 1.5, 1500);
         pointLight.position.set(0, PITCH.h + 100, 0);
         scene.add(pointLight);
 
-        // 地板與線條
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(PITCH.w, PITCH.d), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }));
         floor.rotation.x = -Math.PI / 2;
         scene.add(floor);
@@ -293,7 +317,6 @@
         netMesh.position.y = PITCH.h / 2;
         scene.add(netMesh);
 
-        // 球門輔助函數
         const createGoal = (pos, colorHex) => {
             const mesh = new THREE.Mesh(new THREE.TorusGeometry(TORUS_RADIUS, GOAL_TUBE_RADIUS, 16, 100), new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 2.0 }));
             mesh.position.copy(pos);
@@ -309,7 +332,6 @@
         clock = new THREE.Clock();
     }
 
-    // --- 遊戲邏輯與 UI 更新 ---
     function updateUI() {
         document.getElementById('score-red').innerText = score.red;
         document.getElementById('score-blue').innerText = score.blue;
@@ -338,14 +360,12 @@
         else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen().catch(()=>{});
     }
 
-    // --- 實體物理碰撞核心 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
         const minDist = d1.radius + d2.radius;
         if (dist < minDist && dist > 0) {
             let normal = diff.clone().normalize();
-            // 隨機偏斜防死鎖
             normal.x += (Math.random() - 0.5) * 0.4; normal.y += (Math.random() - 0.5) * 0.4; normal.z += (Math.random() - 0.5) * 0.4;
             normal.normalize();
 
@@ -362,7 +382,6 @@
             
             d1.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(15);
             d2.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(15);
-            
             playSound(sfxHit);
         }
     }
@@ -390,10 +409,9 @@
         }
     }
 
-    // --- 主渲染迴圈 ---
     function animate() {
         if (gameState !== 'playing') {
-            clock.getDelta(); // 清除時間累積
+            clock.getDelta(); 
             renderer.render(scene, camera);
             animationFrameId = requestAnimationFrame(animate);
             return;
@@ -401,7 +419,7 @@
 
         const dt = Math.min(clock.getDelta(), 0.1);
 
-        // --- 玩家輸入 (美國手) ---
+        // --- 玩家輸入 ---
         if (player && player.stunTimer <= 0) {
             let yawInput = (keys["a"] ? 1 : 0) + (keys["d"] ? -1 : 0) - joyLeft.x;
             player.yaw += yawInput * player.yawSpeed * dt;
@@ -418,19 +436,29 @@
         const timeNow = performance.now();
         const goalPosRed = new THREE.Vector3(-GOAL_X, GOAL_Y, 0);
         const goalPosBlue = new THREE.Vector3(GOAL_X, GOAL_Y, 0);
+        
+        // 取得目前選擇的 AI 難易度參數
+        const diffConfig = DIFFICULTY_SETTINGS[currentDifficulty];
 
-        // --- 智能 AI ---
+        // --- 智能 AI (套用難度參數) ---
         drones.forEach(d => {
             if (d === player || d.stunTimer > 0) return;
+            
             if (d.role === "defender") {
                 const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === "striker");
                 if (enemyStriker) {
-                    let target = new THREE.Vector3().copy(d.team === "red" ? goalPosRed : goalPosBlue).lerp(enemyStriker.p, 0.4);
-                    target.z += Math.sin(timeNow * 0.003 + d.p.x) * 25; 
-                    target.y += Math.cos(timeNow * 0.004 + d.p.y) * 25;
+                    // 【難度應用】防守員追蹤位置 (lerpFactor 決定積極度)
+                    let target = new THREE.Vector3().copy(d.team === "red" ? goalPosRed : goalPosBlue).lerp(enemyStriker.p, diffConfig.lerpFactor);
+                    
+                    // 【難度應用】防守員掃掠範圍 (sweepRange 決定移動幅度)
+                    target.z += Math.sin(timeNow * 0.003 + d.p.x) * diffConfig.sweepRange; 
+                    target.y += Math.cos(timeNow * 0.004 + d.p.y) * diffConfig.sweepRange;
+                    
                     const dir = new THREE.Vector3().subVectors(target, d.p);
                     if (dir.length() > 10) {
-                        d.v.addScaledVector(dir.normalize(), d.speed * dt * ((enemyStriker.p.distanceTo(d.team === "red" ? goalPosRed : goalPosBlue) < 150) ? 0.8 : 0.55));
+                        // 【難度應用】防守推擠速度
+                        let defSpeedMult = (enemyStriker.p.distanceTo(d.team === "red" ? goalPosRed : goalPosBlue) < 150) ? diffConfig.speedBurst : diffConfig.speedBase;
+                        d.v.addScaledVector(dir.normalize(), d.speed * dt * defSpeedMult);
                         d.yaw = Math.atan2(-dir.x, -dir.z);
                     }
                 }
@@ -440,14 +468,18 @@
                 else target.copy(d.team === "red" ? goalPosBlue : goalPosRed);
                 
                 let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
-                let speedMult = 0.55;
+                let speedMult = diffConfig.speedBase; // AI 攻擊手速度也受難度影響
                 
                 if (!d.needsReset) {
                     let closestDef = null, minDefDist = Infinity;
                     drones.forEach(other => { if (other.team !== d.team && other.role === 'defender' && d.p.distanceTo(other.p) < minDefDist) { minDefDist = d.p.distanceTo(other.p); closestDef = other; }});
-                    if (closestDef && minDefDist < 150 && dir.dot(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize()) > 0.5) {
+                    
+                    // 根據難度決定 AI 攻擊手的迴避反應距離
+                    let evasionDist = currentDifficulty === 'easy' ? 100 : 150;
+
+                    if (closestDef && minDefDist < evasionDist && dir.dot(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize()) > 0.5) {
                         if (d.p.distanceTo(target) < 200) {
-                            speedMult = 1.0; 
+                            speedMult = diffConfig.speedBurst + 0.2; // 衝刺
                             if (d.v.length() < 300) { 
                                 let slipDir = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize(), new THREE.Vector3(0,1,0)).normalize();
                                 if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
@@ -475,7 +507,6 @@
             resolveGoalCollision(d1, -GOAL_X, GOAL_Y, 0);
             resolveGoalCollision(d1, GOAL_X, GOAL_Y, 0);
 
-            // 穿越得分與重置判定
             if (d1.role === "striker" && !d1.needsReset) {
                 const tX = d1.team === "red" ? GOAL_X : -GOAL_X;
                 const crossed = d1.team === "red" ? (d1.prevP.x <= tX && d1.p.x > tX) : (d1.prevP.x >= tX && d1.p.x < tX);
@@ -493,7 +524,6 @@
         animationFrameId = requestAnimationFrame(animate);
     }
 
-    // --- 遊戲流程控制 ---
     function startGame(mode) {
         requestFullScreen();
         gameMode = mode;
@@ -513,11 +543,9 @@
             document.getElementById('score-blue').style.display = 'inline';
         }
 
-        // 清除場上物件
         drones.forEach(d => scene.remove(d.group));
         drones = [];
 
-        // 生成無人機
         player = new Drone(-GOAL_X - 50, 30, 0, 0xff5555, 'striker', 'red');
         drones.push(player);
         
@@ -529,7 +557,6 @@
             drones.push(new Drone(GOAL_X + 50, 30, -80, 0x5555ff, 'defender', 'blue'));
         }
 
-        // 啟動計時器
         clearInterval(gameTimerId);
         gameTimerId = setInterval(() => {
             timeLeft--;
@@ -562,7 +589,6 @@
         document.getElementById('start-screen').style.display = 'flex';
     }
 
-    // --- 輸入監聽 ---
     window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
     window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
     window.addEventListener('resize', () => {
@@ -571,7 +597,6 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    // 觸控搖桿邏輯
     function setupJoy(zoneId, knobId, outObj) {
         const zone = document.getElementById(zoneId);
         const knob = document.getElementById(knobId);
@@ -597,7 +622,6 @@
     setupJoy('joy-left', 'knob-left', joyLeft);
     setupJoy('joy-right', 'knob-right', joyRight);
 
-    // --- 啟動 ---
     initThreeJS();
     animate();
 
