@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>無人機足球 v0.15 (力學與計分修正版)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #scoreboard { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 40px; border-radius: 12px; border: 2px solid #555; box-shadow: 0 4px 15px rgba(0,0,0,0.8); pointer-events: auto;}
+        .score-text { font-size: 38px; font-weight: bold; }
+        .red-score { color: #ff5555; text-shadow: 0 0 15px #ff4444; }
+        .blue-score { color: #5555ff; text-shadow: 0 0 15px #4444ff; }
+        #timer { font-size: 22px; margin-top: 5px; color: #eee; font-family: monospace; }
+        
+        .touch-ctrl { position: absolute; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
+        .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.2);}
+        
+        #joystick-left { bottom: 40px; left: 40px; width: 130px; height: 130px; }
+        #joystick-right { bottom: 40px; right: 40px; width: 130px; height: 130px; }
+        
+        #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.8); text-align: center; font-size: 14px; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 8px; letter-spacing: 1px;}
+
+        @media (max-width: 768px) { 
+            .touch-ctrl { display: block; } 
+            #pc-hint { display: none; }
+            #scoreboard { top: 10px; padding: 5px 20px; }
+            .score-text { font-size: 28px; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="scoreboard">
+            <span class="score-text red-score" id="score-red">0</span>
+            <span class="score-text" style="margin: 0 15px; color: #888;">-</span>
+            <span class="score-text blue-score" id="score-blue">0</span>
+            <div id="timer">03:00</div>
+            <div style="font-size: 13px; margin-top:5px; color:#bbb;">v0.15: 嚴格穿越判定 & 實體球門碰撞</div>
+        </div>
+        
+        <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
+        <div id="joystick-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
+
+        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與左右轉向 | 右手↑↓←→：前後推飛與左右平移</div>
+    </div>
+
+<script>
+    // --- 1. 場景與攝影機 ---
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x111115, 1200, 3500);
+
+    const pitch = { w: 1600, h: 500, d: 800 }; 
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 4000);
+    camera.position.set(-pitch.w/2 - 300, pitch.h/2 + 350, 0); 
+    camera.lookAt(200, pitch.h/2 - 100, 0); 
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x111115); 
+    document.body.appendChild(renderer.domElement);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    dirLight.position.set(0, pitch.h + 500, 200);
+    scene.add(dirLight);
+
+    // --- 2. 場地與防護網 ---
+    const floorGeo = new THREE.PlaneGeometry(pitch.w, pitch.d);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x223322, roughness: 0.9 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    scene.add(floor);
+
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
+
+    const borderGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-pitch.w/2, 2, -pitch.d/2), new THREE.Vector3(pitch.w/2, 2, -pitch.d/2),
+        new THREE.Vector3(pitch.w/2, 2, pitch.d/2), new THREE.Vector3(-pitch.w/2, 2, pitch.d/2),
+        new THREE.Vector3(-pitch.w/2, 2, -pitch.d/2)
+    ]);
+    scene.add(new THREE.Line(borderGeo, lineMat));
+
+    const centerLineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 2, -pitch.d/2), new THREE.Vector3(0, 2, pitch.d/2)
+    ]);
+    scene.add(new THREE.Line(centerLineGeo, lineMat));
+
+    const circleGeo = new THREE.RingGeometry(145, 150, 64);
+    const circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    const centerCircle = new THREE.Mesh(circleGeo, circleMat);
+    centerCircle.rotation.x = -Math.PI / 2;
+    centerCircle.position.y = 2;
+    scene.add(centerCircle);
+
+    const netGeo = new THREE.BoxGeometry(pitch.w, pitch.h, pitch.d);
+    const netMat = new THREE.MeshBasicMaterial({ color: 0x556655, wireframe: true, transparent: true, opacity: 0.15 });
+    const netMesh = new THREE.Mesh(netGeo, netMat);
+    netMesh.position.y = pitch.h / 2;
+    scene.add(netMesh);
+
+    // --- 3. 球門與無人機 ---
+    const goalRadius = 60; // 球門內徑
+    const goalTube = 5;    // 球門外框粗細
+    const goalY = pitch.h / 2; 
+    const goalPosRed = new THREE.Vector3(-pitch.w/2 + 150, goalY, 0);
+    const goalPosBlue = new THREE.Vector3(pitch.w/2 - 150, goalY, 0);
+
+    function createGoal(position, colorHex) {
+        const geo = new THREE.TorusGeometry(goalRadius, goalTube, 16, 100);
+        const mat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 1.0 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(position);
+        mesh.rotation.y = Math.PI / 2;
+        scene.add(mesh);
+        
+        const defCircle = new THREE.Mesh(new THREE.RingGeometry(goalRadius*1.8-3, goalRadius*1.8, 32), circleMat);
+        defCircle.rotation.x = -Math.PI / 2;
+        defCircle.position.set(position.x, 2, position.z);
+        scene.add(defCircle);
+
+        return mesh;
+    }
+    createGoal(goalPosRed, 0xff5555);
+    createGoal(goalPosBlue, 0x5555ff);
+
+    const droneGeoCage = new THREE.IcosahedronGeometry(25, 2);
+    const droneGeoCore = new THREE.SphereGeometry(10, 16, 16);
+
+    class Drone {
+        constructor(x, y, z, color, role, team) {
+            this.p = new THREE.Vector3(x, y, z);
+            this.prevP = new THREE.Vector3(x, y, z); // 記錄上一幀位置，用於平面穿越判定
+            this.v = new THREE.Vector3(0, 0, 0);
+            this.yaw = team === 'red' ? -Math.PI/2 : Math.PI/2; 
+            this.radius = 25;
+            this.mass = 1.0;
+            this.color = color;
+            this.role = role;
+            this.team = team;
+            this.speed = 1800; 
+            this.yawSpeed = 3.5; 
+            this.friction = 0.94; 
+            this.needsReset = false;
+
+            this.group = new THREE.Group();
+            
+            const cageMat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true, transparent: true, opacity: 0.7 });
+            this.cageMesh = new THREE.Mesh(droneGeoCage, cageMat);
+            this.group.add(this.cageMesh);
+
+            const coreMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.4 });
+            this.coreMesh = new THREE.Mesh(droneGeoCore, coreMat);
+            this.group.add(this.coreMesh);
+
+            if (role === 'striker') {
+                const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                this.indicator = new THREE.Mesh(new THREE.SphereGeometry(6, 8, 8), lightMat);
+                this.indicator.position.y = 28;
+                this.group.add(this.indicator);
+            }
+
+            const headMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            this.headLight = new THREE.Mesh(new THREE.SphereGeometry(5, 8, 8), headMat);
+            this.headLight.position.set(0, 0, -25); 
+            this.group.add(this.headLight);
+
+            scene.add(this.group);
+        }
+
+        update(dt) {
+            this.prevP.copy(this.p); // 儲存上一幀位置
+
+            this.v.multiplyScalar(this.friction);
+            this.p.addScaledVector(this.v, dt);
+
+            // 邊界防護網反彈
+            if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.6; }
+            if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.6; }
+            if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.6; } 
+            if (this.p.y + this.radius > pitch.h) { this.p.y = pitch.h - this.radius; this.v.y *= -0.6; } 
+            if (this.p.z - this.radius < -pitch.d/2) { this.p.z = -pitch.d/2 + this.radius; this.v.z *= -0.6; }
+            if (this.p.z + this.radius > pitch.d/2) { this.p.z = pitch.d/2 - this.radius; this.v.z *= -0.6; }
+
+            this.group.position.copy(this.p);
+            this.group.rotation.y = this.yaw;
+            
+            if(this.v.length() > 5) {
+                const axis = new THREE.Vector3(this.v.z, 0, -this.v.x).normalize();
+                this.cageMesh.rotateOnWorldAxis(axis, this.v.length() * dt * 0.04);
+            }
+
+            if (this.role === 'striker') {
+                this.indicator.material.color.setHex(this.needsReset ? 0x444444 : 0xffffff);
+            }
+        }
+    }
+
+    const drones = [
+        new Drone(-250, goalY, 0, 0xff5555, 'striker', 'red'), 
+        new Drone(-400, goalY, 150, 0xff5555, 'defender', 'red'),
+        new Drone(-400, goalY, -150, 0xff5555, 'defender', 'red'),
+        new Drone(250, goalY, 0, 0x5555ff, 'striker', 'blue'), 
+        new Drone(400, goalY, 150, 0x5555ff, 'defender', 'blue'),
+        new Drone(400, goalY, -150, 0x5555ff, 'defender', 'blue')
+    ];
+    const player = drones[0];
+
+    // --- 4. 輸入與搖桿 ---
+    let gameTime = 180;
+    let scoreRed = 0, scoreBlue = 0;
+    const clock = new THREE.Clock();
+
+    const keys = { w:false, a:false, s:false, d:false, arrowup:false, arrowdown:false, arrowleft:false, arrowright:false };
+    let joyLeft = { x: 0, y: 0 }; 
+    let joyRight = { x: 0, y: 0 };
+
+    window.addEventListener('keydown', e => { 
+        const k = e.key.toLowerCase();
+        if(keys.hasOwnProperty(k)) keys[k] = true; 
+    });
+    window.addEventListener('keyup', e => { 
+        const k = e.key.toLowerCase();
+        if(keys.hasOwnProperty(k)) keys[k] = false; 
+    });
+
+    function setupJoystick(zoneId, knobId, outVector) {
+        const zone = document.getElementById(zoneId);
+        const knob = document.getElementById(knobId);
+        let touchId = null;
+
+        zone.addEventListener('touchstart', e => {
+            e.preventDefault();
+            touchId = e.changedTouches[0].identifier;
+            updateJoy(e.changedTouches[0]);
+        }, {passive: false});
+
+        zone.addEventListener('touchmove', e => {
+            e.preventDefault();
+            for(let t of e.changedTouches) if(t.identifier === touchId) updateJoy(t);
+        }, {passive: false});
+
+        const reset = () => {
+            touchId = null;
+            knob.style.transform = `translate(-50%, -50%)`;
+            outVector.x = 0; outVector.y = 0;
+        };
+        zone.addEventListener('touchend', reset);
+        zone.addEventListener('touchcancel', reset);
+
+        function updateJoy(touch) {
+            const rect = zone.getBoundingClientRect();
+            const cx = rect.left + rect.width/2;
+            const cy = rect.top + rect.height/2;
+            let dx = touch.clientX - cx;
+            let dy = touch.clientY - cy;
+            
+            let maxDist = rect.width/2;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+            if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            
+            outVector.x = dx / maxDist;
+            outVector.y = -dy / maxDist; 
+        }
+    }
+    setupJoystick('joystick-left', 'knob-left', joyLeft);
+    setupJoystick('joystick-right', 'knob-right', joyRight);
+
+    // --- 5. 物理碰撞核心 ---
+    
+    // 【修正 1】無人機之間的真實力學碰撞
+    function resolveCollision(d1, d2) {
+        const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
+        const dist = diff.length();
+        const minDist = d1.radius + d2.radius;
+
+        if (dist < minDist && dist > 0) {
+            const normal = diff.clone().normalize();
+            
+            // 步驟A: 位置修正 (防止穿模與無限擠壓)
+            const overlap = minDist - dist;
+            const totalMass = d1.mass + d2.mass;
+            d1.p.addScaledVector(normal, -overlap * (d2.mass / totalMass));
+            d2.p.addScaledVector(normal, overlap * (d1.mass / totalMass));
+
+            // 步驟B: 動能轉移
+            const relVel = new THREE.Vector3().subVectors(d1.v, d2.v);
+            const speed = relVel.dot(normal);
+
+            // 只有當兩者互相靠近時才施加碰撞推力
+            if (speed > 0) {
+                const e = 0.5; // 彈性係數(模擬塑膠籠的摩擦與吸震)
+                const impulse = (1 + e) * speed / (1/d1.mass + 1/d2.mass);
+                
+                d1.v.addScaledVector(normal, -impulse / d1.mass);
+                d2.v.addScaledVector(normal, impulse / d2.mass);
+            }
+        }
+    }
+
+    // 【修正 2】球門實體邊框(Torus)碰撞
+    function resolveGoalCollision(drone, goalPos, R, r) {
+        const dx = drone.p.x - goalPos.x;
+        const dy = drone.p.y - goalPos.y;
+        const dz = drone.p.z - goalPos.z;
+
+        const distYZ = Math.hypot(dy, dz);
+        
+        let closestY = 0, closestZ = 0;
+        if (distYZ > 0) {
+            closestY = (dy / distYZ) * R;
+            closestZ = (dz / distYZ) * R;
+        } else {
+            closestY = R; closestZ = 0;
+        }
+
+        const diffX = dx;
+        const diffY = dy - closestY;
+        const diffZ = dz - closestZ;
+        const distToRing = Math.hypot(diffX, diffY, diffZ);
+        
+        const minDist = drone.radius + r;
+
+        if (distToRing < minDist && distToRing > 0) {
+            const nx = diffX / distToRing;
+            const ny = diffY / distToRing;
+            const nz = diffZ / distToRing;
+
+            // 位置修正(彈出球門邊框)
+            const overlap = minDist - distToRing;
+            drone.p.x += nx * overlap;
+            drone.p.y += ny * overlap;
+            drone.p.z += nz * overlap;
+
+            // 反彈動能
+            const normal = new THREE.Vector3(nx, ny, nz);
+            const speed = drone.v.dot(normal);
+            if (speed < 0) {
+                const e = 0.4; // 球門反彈係數
+                drone.v.addScaledVector(normal, -(1 + e) * speed);
+            }
+        }
+    }
+
+
+    // --- 6. 主迴圈 ---
+    function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        if(gameTime > 0) {
+            gameTime -= dt;
+            let m = Math.floor(gameTime / 60);
+            let s = Math.floor(gameTime % 60);
+            document.getElementById('timer').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        }
+
+        // --- 玩家操控 ---
+        let yawInput = 0;
+        if(keys.a) yawInput += 1;
+        if(keys.d) yawInput -= 1;
+        yawInput -= joyLeft.x;
+        player.yaw += yawInput * player.yawSpeed * dt;
+
+        let throttleInput = 0;
+        if(keys.w) throttleInput += 1;
+        if(keys.s) throttleInput -= 1;
+        throttleInput += joyLeft.y;
+        player.v.y += throttleInput * player.speed * dt;
+
+        const forwardVec = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize();
+        const rightVec = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize();
+
+        let pitchInput = 0; 
+        if(keys.arrowup) pitchInput += 1;
+        if(keys.arrowdown) pitchInput -= 1;
+        pitchInput += joyRight.y;
+        
+        let rollInput = 0; 
+        if(keys.arrowleft) rollInput -= 1;
+        if(keys.arrowright) rollInput += 1;
+        rollInput += joyRight.x;
+
+        player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
+        player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
+
+        // --- AI 邏輯 ---
+        drones.forEach(d => {
+            if(d === player) return;
+            let target = new THREE.Vector3(d.p.x, d.p.y, d.p.z);
+
+            if(d.role === 'striker') {
+                if(d.needsReset) {
+                    target.set(d.team==='red'? -200:200, goalY, 0); 
+                } else {
+                    target.copy(d.team==='red'? goalPosBlue : goalPosRed); 
+                }
+            } else if (d.role === 'defender') {
+                const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
+                const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
+                target.copy(myGoal).lerp(enemyStriker.p, 0.4); // 攔截路徑
+            }
+
+            const dir = new THREE.Vector3().subVectors(target, d.p);
+            if(dir.length() > 20) {
+                dir.normalize();
+                d.v.addScaledVector(dir, d.speed * dt * 0.55); 
+                d.yaw = Math.atan2(-dir.x, -dir.z); 
+            }
+        });
+
+        // --- 結算與碰撞 ---
+        for(let i=0; i<drones.length; i++) {
+            drones[i].update(dt);
+            
+            // 計算與其他無人機的碰撞
+            for(let j=i+1; j<drones.length; j++) resolveCollision(drones[i], drones[j]);
+
+            // 計算與雙方球門邊框的實體碰撞
+            resolveGoalCollision(drones[i], goalPosRed, goalRadius, goalTube);
+            resolveGoalCollision(drones[i], goalPosBlue, goalRadius, goalTube);
+
+            // FAI規則：得分後退回半場解除限制
+            if (drones[i].role === 'striker' && drones[i].needsReset) {
+                if (drones[i].team === 'red' && drones[i].p.x < 0) drones[i].needsReset = false;
+                if (drones[i].team === 'blue' && drones[i].p.x > 0) drones[i].needsReset = false;
+            }
+
+            // 【修正 3】嚴格的得分判定：必須穿越 X 平面，且在圓環半徑內
+            if (drones[i].role === 'striker' && !drones[i].needsReset) {
+                const tGoal = drones[i].team === 'red' ? goalPosBlue : goalPosRed;
+                
+                let crossedPlane = false;
+                if (drones[i].team === 'red') {
+                    // 紅隊由 -X 往 +X 飛，穿越藍球門
+                    if (drones[i].prevP.x <= tGoal.x && drones[i].p.x > tGoal.x) crossedPlane = true;
+                } else {
+                    // 藍隊由 +X 往 -X 飛，穿越紅球門
+                    if (drones[i].prevP.x >= tGoal.x && drones[i].p.x < tGoal.x) crossedPlane = true;
+                }
+
+                if (crossedPlane) {
+                    // 檢查穿越瞬間的 Y/Z 是否在球門孔徑內
+                    const distFromCenter = Math.hypot(drones[i].p.y - tGoal.y, drones[i].p.z - tGoal.z);
+                    
+                    if (distFromCenter < goalRadius) {
+                        drones[i].needsReset = true;
+                        if(drones[i].team === 'red') {
+                            scoreRed++; document.getElementById('score-red').innerText = scoreRed;
+                        } else {
+                            scoreBlue++; document.getElementById('score-blue').innerText = scoreBlue;
+                        }
+                    }
+                }
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+</script>
+</body>
+</html>
