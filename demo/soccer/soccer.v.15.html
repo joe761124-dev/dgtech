@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>無人機足球 v0.20 (AI 防卡死升級)</title>
+    <title>無人機足球 v0.21 (真實撞擊力學)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -43,7 +43,7 @@
 
     <div id="start-screen">
         <div class="game-title">無人機足球模擬器</div>
-        <div class="game-subtitle">v0.20 | F9A-B 20cm 級 (搭載 AI 防卡死游移系統)</div>
+        <div class="game-subtitle">v0.21 | 真實彈性碰撞軌跡與失控硬直系統</div>
         <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
         <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
     </div>
@@ -60,7 +60,7 @@
         <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
         <div id="joystick-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
 
-        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與轉向 | 右手↑↓←→：俯仰與翻滾平移</div>
+        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與左右轉向 | 右手↑↓←→：前後推飛與左右平移</div>
     </div>
 
 <script>
@@ -137,6 +137,7 @@
         defCircle.rotation.x = -Math.PI / 2;
         defCircle.position.set(position.x, 2, position.z);
         scene.add(defCircle);
+
         return mesh;
     }
     createGoal(goalPosRed, 0xff5555);
@@ -160,6 +161,10 @@
             this.yawSpeed = 3.5; 
             this.friction = 0.94; 
             this.needsReset = false;
+            
+            // 【新增】失控硬直與自轉參數
+            this.stunTimer = 0; 
+            this.angularVelocity = new THREE.Vector3(0, 0, 0);
 
             this.group = new THREE.Group();
             
@@ -188,23 +193,36 @@
 
         update(dt) {
             this.prevP.copy(this.p); 
+            
+            // 硬直計時器倒數
+            if (this.stunTimer > 0) this.stunTimer -= dt;
 
             this.v.multiplyScalar(this.friction);
             this.p.addScaledVector(this.v, dt);
 
-            if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.6; }
-            if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.6; }
-            if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.6; } 
-            if (this.p.y + this.radius > pitch.h) { this.p.y = pitch.h - this.radius; this.v.y *= -0.6; } 
-            if (this.p.z - this.radius < -pitch.d/2) { this.p.z = -pitch.d/2 + this.radius; this.v.z *= -0.6; }
-            if (this.p.z + this.radius > pitch.d/2) { this.p.z = pitch.d/2 - this.radius; this.v.z *= -0.6; }
+            // 邊界碰撞 (也加入些微硬直與反彈)
+            if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
+            if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
+            if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.7; this.stunTimer=0.1;} 
+            if (this.p.y + this.radius > pitch.h) { this.p.y = pitch.h - this.radius; this.v.y *= -0.7; this.stunTimer=0.1;} 
+            if (this.p.z - this.radius < -pitch.d/2) { this.p.z = -pitch.d/2 + this.radius; this.v.z *= -0.7; this.stunTimer=0.1;}
+            if (this.p.z + this.radius > pitch.d/2) { this.p.z = pitch.d/2 - this.radius; this.v.z *= -0.7; this.stunTimer=0.1;}
 
             this.group.position.copy(this.p);
             this.group.rotation.y = this.yaw;
             
-            if(this.v.length() > 5) {
+            // 視覺特效：飛行錯覺與碰撞自轉
+            if(this.v.length() > 5 && this.angularVelocity.lengthSq() < 1) {
                 const axis = new THREE.Vector3(this.v.z, 0, -this.v.x).normalize();
                 this.cageMesh.rotateOnWorldAxis(axis, this.v.length() * dt * 0.04);
+            }
+            
+            // 撞擊失控自轉
+            if (this.angularVelocity.lengthSq() > 0.01) {
+                this.cageMesh.rotation.x += this.angularVelocity.x * dt;
+                this.cageMesh.rotation.y += this.angularVelocity.y * dt;
+                this.cageMesh.rotation.z += this.angularVelocity.z * dt;
+                this.angularVelocity.multiplyScalar(0.9); // 逐漸煞停
             }
 
             if (this.role === 'striker') {
@@ -276,11 +294,11 @@
         if (mode === 'practice') {
             document.getElementById('score-dash').style.display = 'none';
             document.getElementById('score-blue').style.display = 'none';
-            document.getElementById('mode-hint').innerText = "單人練習：適應 1.5m 高度與更窄的球門！";
+            document.getElementById('mode-hint').innerText = "撞到球門框會被彈飛產生硬直，請小心瞄準！";
         } else {
             document.getElementById('score-dash').style.display = 'inline';
             document.getElementById('score-blue').style.display = 'inline';
-            document.getElementById('mode-hint').innerText = "注意：防守員已具備動態推擠防禦能力！";
+            document.getElementById('mode-hint').innerText = "警告：遭到撞擊會暫時失去動力，請善用慣性！";
         }
 
         drones.forEach(d => scene.remove(d.group));
@@ -300,30 +318,51 @@
         clock.start(); 
     }
 
+    // --- 【大幅修正】真實排斥力學與球面滑移 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
         const minDist = d1.radius + d2.radius;
 
         if (dist < minDist && dist > 0) {
-            const normal = diff.clone().normalize();
+            // 1. 位置修正 (避免穿模)
             const overlap = minDist - dist;
+            let normal = diff.clone().normalize();
+            
+            // 【球面滑移】加入微小隨機偏斜，避免正向頂死
+            normal.x += (Math.random() - 0.5) * 0.4;
+            normal.y += (Math.random() - 0.5) * 0.4;
+            normal.z += (Math.random() - 0.5) * 0.4;
+            normal.normalize();
+
             const totalMass = d1.mass + d2.mass;
             d1.p.addScaledVector(normal, -overlap * (d2.mass / totalMass));
             d2.p.addScaledVector(normal, overlap * (d1.mass / totalMass));
 
+            // 2. 動量轉移與彈性排斥
             const relVel = new THREE.Vector3().subVectors(d1.v, d2.v);
             const speed = relVel.dot(normal);
 
-            if (speed > 0) {
-                const e = 0.5; 
-                const impulse = (1 + e) * speed / (1/d1.mass + 1/d2.mass);
-                d1.v.addScaledVector(normal, -impulse / d1.mass);
-                d2.v.addScaledVector(normal, impulse / d2.mass);
-            }
+            // 【強制排斥】即使雙方相對速度很低(互相擠壓)，也會被強制彈開
+            let impactSpeed = Math.max(speed, 350); 
+            const e = 0.8; // 高彈性係數(模擬塑膠防護罩)
+            const impulse = (1 + e) * impactSpeed / (1/d1.mass + 1/d2.mass);
+            
+            d1.v.addScaledVector(normal, -impulse / d1.mass);
+            d2.v.addScaledVector(normal, impulse / d2.mass);
+
+            // 3. 【失控硬直】撞擊後失去動力 0.25 秒
+            d1.stunTimer = 0.25;
+            d2.stunTimer = 0.25;
+
+            // 4. 【視覺自轉】防護罩被擦撞產生劇烈旋轉
+            const spin = 15;
+            d1.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
+            d2.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
         }
     }
 
+    // --- 球門實體碰撞同步更新排斥力與硬直 ---
     function resolveGoalCollision(drone, goalCenter, torusR, tubeR) {
         const dx = drone.p.x - goalCenter.x;
         const dy = drone.p.y - goalCenter.y;
@@ -345,21 +384,30 @@
         const minDist = drone.radius + tubeR; 
 
         if (distToRing < minDist && distToRing > 0) {
-            const nx = diffX / distToRing;
-            const ny = diffY / distToRing;
-            const nz = diffZ / distToRing;
+            let nx = diffX / distToRing;
+            let ny = diffY / distToRing;
+            let nz = diffZ / distToRing;
 
             const overlap = minDist - distToRing;
             drone.p.x += nx * overlap;
             drone.p.y += ny * overlap;
             drone.p.z += nz * overlap;
 
-            const normal = new THREE.Vector3(nx, ny, nz);
+            let normal = new THREE.Vector3(nx, ny, nz);
+            
+            // 球門撞擊偏斜
+            normal.x += (Math.random() - 0.5) * 0.2;
+            normal.normalize();
+
             const speed = drone.v.dot(normal);
-            if (speed < 0) {
-                const e = 0.4; 
-                drone.v.addScaledVector(normal, -(1 + e) * speed);
-            }
+            let impactSpeed = Math.max(-speed, 400); // 撞到硬鐵管，基礎排斥力更大
+            
+            const e = 0.6; 
+            drone.v.addScaledVector(normal, (1 + e) * impactSpeed);
+            
+            // 撞球門也會產生硬直與旋轉
+            drone.stunTimer = 0.2;
+            drone.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(20);
         }
     }
 
@@ -381,58 +429,60 @@
             document.getElementById('timer').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         }
 
-        // --- 玩家操控 ---
-        let yawInput = 0;
-        if(keys.a) yawInput += 1;
-        if(keys.d) yawInput -= 1;
-        yawInput -= joyLeft.x;
-        player.yaw += yawInput * player.yawSpeed * dt;
+        // --- 【修改】玩家操控：只有在無硬直(未被撞飛)時才能施加推力 ---
+        if (player.stunTimer <= 0) {
+            let yawInput = 0;
+            if(keys.a) yawInput += 1;
+            if(keys.d) yawInput -= 1;
+            yawInput -= joyLeft.x;
+            player.yaw += yawInput * player.yawSpeed * dt;
 
-        let throttleInput = 0;
-        if(keys.w) throttleInput += 1;
-        if(keys.s) throttleInput -= 1;
-        throttleInput += joyLeft.y;
-        player.v.y += throttleInput * player.speed * dt;
+            let throttleInput = 0;
+            if(keys.w) throttleInput += 1;
+            if(keys.s) throttleInput -= 1;
+            throttleInput += joyLeft.y;
+            player.v.y += throttleInput * player.speed * dt;
 
-        const forwardVec = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize();
-        const rightVec = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize();
+            const forwardVec = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize();
+            const rightVec = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize();
 
-        let pitchInput = 0; 
-        if(keys.arrowup) pitchInput += 1;
-        if(keys.arrowdown) pitchInput -= 1;
-        pitchInput += joyRight.y;
-        
-        let rollInput = 0; 
-        if(keys.arrowleft) rollInput -= 1;
-        if(keys.arrowright) rollInput += 1;
-        rollInput += joyRight.x;
+            let pitchInput = 0; 
+            if(keys.arrowup) pitchInput += 1;
+            if(keys.arrowdown) pitchInput -= 1;
+            pitchInput += joyRight.y;
+            
+            let rollInput = 0; 
+            if(keys.arrowleft) rollInput -= 1;
+            if(keys.arrowright) rollInput += 1;
+            rollInput += joyRight.x;
 
-        player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
-        player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
+            player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
+            player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
+        }
 
-        // --- 智能 AI 邏輯 (包含防卡死與主動掃掠) ---
+        // --- 智能 AI 邏輯 ---
         const timeNow = performance.now();
 
         drones.forEach(d => {
             if(d === player) return;
             
+            // 【修改】AI 同樣受到硬直限制，被撞時無法推進
+            if (d.stunTimer > 0) return; 
+
             if (d.role === 'defender') {
                 const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
                 const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
                 if(!enemyStriker) return; 
 
-                // 攔截點計算
                 let target = new THREE.Vector3().copy(myGoal).lerp(enemyStriker.p, 0.4); 
                 
-                // 【修正 1: 主動掃掠防禦】 讓防守員在攔截點上進行 8 字型游移，避免死鎖
                 const sweepRange = 25; 
                 target.z += Math.sin(timeNow * 0.003 + d.p.x) * sweepRange;
                 target.y += Math.cos(timeNow * 0.004 + d.p.y) * sweepRange;
 
                 const dir = new THREE.Vector3().subVectors(target, d.p);
-                if(dir.length() > 10) { // 減少死區，保持動態
+                if(dir.length() > 10) { 
                     dir.normalize();
-                    // 【修正 2: 爆發推擠】如果敵方攻擊手極度靠近球門，防守員會瞬間加強推力把對方擠出去
                     let defSpeedMult = (enemyStriker.p.distanceTo(myGoal) < 150) ? 0.8 : 0.55;
                     d.v.addScaledVector(dir, d.speed * dt * defSpeedMult); 
                     d.yaw = Math.atan2(-dir.x, -dir.z); 
@@ -459,31 +509,25 @@
                         }
                     });
 
-                    // 遇到防守員阻擋
                     if (closestDef && minDefDist < 150) {
                         let toDef = new THREE.Vector3().subVectors(closestDef.p, d.p).normalize();
-                        let isBlocking = dir.dot(toDef) > 0.5; // 放寬阻擋判定角度
+                        let isBlocking = dir.dot(toDef) > 0.5; 
 
                         if (isBlocking) {
                             let distToGoal = d.p.distanceTo(target);
                             
-                            // 距離夠近，啟動衝撞
                             if (distToGoal < 200) {
                                 speedMult = 1.0; 
                                 
-                                // 【修正 3: 泥鰍滑步防卡死】 油門全開但速度卻很慢(被卡住了)
                                 if (d.v.length() < 300) { 
-                                    // 產生垂直於敵人的側向/上下滑步推力
                                     let slipDir = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
-                                    // 利用時間函數保持短暫的同向滑步，避免左右互抵
                                     if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
                                     
                                     dir.addScaledVector(slipDir, 1.5);
-                                    dir.y += Math.cos(timeNow * 0.006) * 1.5; // 上下鑽
+                                    dir.y += Math.cos(timeNow * 0.006) * 1.5; 
                                     dir.normalize();
                                 }
                             } else {
-                                // 遠距離標準閃避
                                 let lateralVec = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
                                 let relativePos = new THREE.Vector3().subVectors(d.p, closestDef.p);
                                 if (relativePos.dot(lateralVec) < 0) lateralVec.negate();
