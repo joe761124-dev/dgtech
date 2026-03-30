@@ -3,17 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>無人機足球 v0.16 (智能 AI 突破版)</title>
+    <title>無人機足球 v0.17 (單人練習/3v3雙模式)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        /* Start Screen */
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 10, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        .game-title { font-size: 48px; font-weight: bold; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px #44ff44; text-align: center;}
+        .game-subtitle { font-size: 18px; color: #aaa; margin-bottom: 50px; text-align: center;}
+        .btn-mode { background: #223322; color: #fff; border: 2px solid #44ff44; padding: 15px 40px; font-size: 24px; border-radius: 10px; margin: 10px; cursor: pointer; transition: 0.3s; width: 300px; font-weight: bold;}
+        .btn-mode:hover { background: #44ff44; color: #000; box-shadow: 0 0 15px #44ff44; }
+
+        /* UI Layer */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
         #scoreboard { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 40px; border-radius: 12px; border: 2px solid #555; box-shadow: 0 4px 15px rgba(0,0,0,0.8); pointer-events: auto;}
         .score-text { font-size: 38px; font-weight: bold; }
         .red-score { color: #ff5555; text-shadow: 0 0 15px #ff4444; }
         .blue-score { color: #5555ff; text-shadow: 0 0 15px #4444ff; }
         #timer { font-size: 22px; margin-top: 5px; color: #eee; font-family: monospace; }
         
+        /* Mobile Controls */
         .touch-ctrl { position: absolute; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.2);}
         
@@ -27,19 +37,27 @@
             #pc-hint { display: none; }
             #scoreboard { top: 10px; padding: 5px 20px; }
             .score-text { font-size: 28px; }
+            .game-title { font-size: 36px; }
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
+    <div id="start-screen">
+        <div class="game-title">無人機足球模擬器</div>
+        <div class="game-subtitle">v0.17 | 支援美國手 (Mode 2) 操控與 FAI 賽制</div>
+        <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
+        <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
+    </div>
+
     <div id="ui-layer">
         <div id="scoreboard">
             <span class="score-text red-score" id="score-red">0</span>
-            <span class="score-text" style="margin: 0 15px; color: #888;">-</span>
+            <span class="score-text" id="score-dash" style="margin: 0 15px; color: #888;">-</span>
             <span class="score-text blue-score" id="score-blue">0</span>
             <div id="timer">03:00</div>
-            <div style="font-size: 13px; margin-top:5px; color:#bbb;">v0.16: AI 攻擊手懂得閃避與撞擊</div>
+            <div id="mode-hint" style="font-size: 13px; margin-top:5px; color:#bbb;"></div>
         </div>
         
         <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
@@ -104,7 +122,7 @@
     netMesh.position.y = pitch.h / 2;
     scene.add(netMesh);
 
-    // --- 3. 球門與無人機 ---
+    // --- 3. 球門與無人機類別 ---
     const goalRadius = 60; 
     const goalTube = 5;    
     const goalY = pitch.h / 2; 
@@ -200,17 +218,11 @@
         }
     }
 
-    const drones = [
-        new Drone(-250, goalY, 0, 0xff5555, 'striker', 'red'), 
-        new Drone(-400, goalY, 150, 0xff5555, 'defender', 'red'),
-        new Drone(-400, goalY, -150, 0xff5555, 'defender', 'red'),
-        new Drone(250, goalY, 0, 0x5555ff, 'striker', 'blue'), 
-        new Drone(400, goalY, 150, 0x5555ff, 'defender', 'blue'),
-        new Drone(400, goalY, -150, 0x5555ff, 'defender', 'blue')
-    ];
-    const player = drones[0];
-
-    // --- 4. 輸入與搖桿 ---
+    // --- 4. 遊戲狀態與輸入系統 ---
+    let gameState = 'menu'; // menu, playing, over
+    let gameMode = '3v3';
+    let drones = [];
+    let player = null;
     let gameTime = 180;
     let scoreRed = 0, scoreBlue = 0;
     const clock = new THREE.Clock();
@@ -271,7 +283,51 @@
     setupJoystick('joystick-left', 'knob-left', joyLeft);
     setupJoystick('joystick-right', 'knob-right', joyRight);
 
-    // --- 5. 物理碰撞核心 ---
+    // --- 5. 遊戲初始化 (雙模式切換) ---
+    function startGame(mode) {
+        gameMode = mode;
+        gameState = 'playing';
+        gameTime = 180;
+        scoreRed = 0;
+        scoreBlue = 0;
+        document.getElementById('score-red').innerText = '0';
+        document.getElementById('score-blue').innerText = '0';
+        
+        document.getElementById('start-screen').style.display = 'none';
+        document.getElementById('ui-layer').style.display = 'block';
+
+        // 根據模式調整 UI
+        if (mode === 'practice') {
+            document.getElementById('score-dash').style.display = 'none';
+            document.getElementById('score-blue').style.display = 'none';
+            document.getElementById('mode-hint').innerText = "單人練習模式：穿越藍色球門得分，得分後請飛回己方(紅)半場重置";
+        } else {
+            document.getElementById('score-dash').style.display = 'inline';
+            document.getElementById('score-blue').style.display = 'inline';
+            document.getElementById('mode-hint').innerText = "3v3 競賽：擊敗對手，保護己方球門！";
+        }
+
+        // 清除舊無人機
+        drones.forEach(d => scene.remove(d.group));
+        drones = [];
+
+        // 依據模式生成實體
+        drones.push(new Drone(-250, goalY, 0, 0xff5555, 'striker', 'red')); // 玩家永遠存在
+        
+        if (mode === '3v3') {
+            drones.push(new Drone(-400, goalY, 150, 0xff5555, 'defender', 'red'));
+            drones.push(new Drone(-400, goalY, -150, 0xff5555, 'defender', 'red'));
+            drones.push(new Drone(250, goalY, 0, 0x5555ff, 'striker', 'blue'));
+            drones.push(new Drone(400, goalY, 150, 0x5555ff, 'defender', 'blue'));
+            drones.push(new Drone(400, goalY, -150, 0x5555ff, 'defender', 'blue'));
+        }
+        
+        player = drones[0];
+        clock.start(); // 開始計時
+    }
+
+
+    // --- 6. 物理碰撞核心 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -304,7 +360,6 @@
         const dz = drone.p.z - goalPos.z;
 
         const distYZ = Math.hypot(dy, dz);
-        
         let closestY = 0, closestZ = 0;
         if (distYZ > 0) {
             closestY = (dy / distYZ) * R;
@@ -317,7 +372,6 @@
         const diffY = dy - closestY;
         const diffZ = dz - closestZ;
         const distToRing = Math.hypot(diffX, diffY, diffZ);
-        
         const minDist = drone.radius + r;
 
         if (distToRing < minDist && distToRing > 0) {
@@ -340,9 +394,16 @@
     }
 
 
-    // --- 6. 主迴圈 ---
+    // --- 7. 主迴圈 ---
     function animate() {
         requestAnimationFrame(animate);
+        
+        if (gameState !== 'playing') {
+            clock.getDelta(); // 清除累積時間，避免重新開始時暴衝
+            renderer.render(scene, camera);
+            return;
+        }
+
         const dt = Math.min(clock.getDelta(), 0.1);
 
         if(gameTime > 0) {
@@ -381,16 +442,16 @@
         player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
         player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
 
-        // --- 智能 AI 邏輯 ---
+        // --- 智能 AI 邏輯 (練習模式下不會觸發) ---
         drones.forEach(d => {
             if(d === player) return;
             
-            // AI 防守員邏輯 (追蹤敵方攻擊手並擋在球門前)
             if (d.role === 'defender') {
                 const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
                 const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
+                if(!enemyStriker) return; // 防呆處理
+
                 let target = new THREE.Vector3().copy(myGoal).lerp(enemyStriker.p, 0.4); 
-                
                 const dir = new THREE.Vector3().subVectors(target, d.p);
                 if(dir.length() > 20) {
                     dir.normalize();
@@ -398,7 +459,6 @@
                     d.yaw = Math.atan2(-dir.x, -dir.z); 
                 }
             } 
-            // AI 攻擊手邏輯 (智能閃避與撞擊)
             else if (d.role === 'striker') {
                 let target = new THREE.Vector3();
                 if(d.needsReset) {
@@ -408,10 +468,9 @@
                 }
 
                 let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
-                let speedMult = 0.55; // 預設巡航速度
+                let speedMult = 0.55; 
                 
                 if (!d.needsReset) {
-                    // 1. 尋找擋在路上的防守員
                     let closestDef = null;
                     let minDefDist = Infinity;
                     drones.forEach(other => {
@@ -426,26 +485,18 @@
 
                     if (closestDef && minDefDist < 250) {
                         let toDef = new THREE.Vector3().subVectors(closestDef.p, d.p).normalize();
-                        let isBlocking = dir.dot(toDef) > 0.6; // 判斷防守員是否在正前方
+                        let isBlocking = dir.dot(toDef) > 0.6; 
 
                         if (isBlocking) {
                             let distToGoal = d.p.distanceTo(target);
-
                             if (distToGoal < 300) {
-                                // 【暴力突破】距離球門很近了，放棄閃避，全速撞開防守員！
                                 speedMult = 1.0; 
                             } else {
-                                // 【迂迴閃避】產生一個垂直於進攻方向的側推力 (Lateral Dodge)
                                 let lateralVec = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
-                                
-                                // 判斷防守員偏左還是偏右，決定往反方向閃
                                 let relativePos = new THREE.Vector3().subVectors(d.p, closestDef.p);
                                 if (relativePos.dot(lateralVec) < 0) lateralVec.negate();
                                 
-                                // 混合原路線與側推力
                                 dir.addScaledVector(lateralVec, 1.2).normalize();
-                                
-                                // 上下高度閃避
                                 if (d.p.y < closestDef.p.y) dir.y -= 0.5; else dir.y += 0.5;
                                 dir.normalize();
                             }
@@ -467,11 +518,13 @@
             resolveGoalCollision(drones[i], goalPosRed, goalRadius, goalTube);
             resolveGoalCollision(drones[i], goalPosBlue, goalRadius, goalTube);
 
+            // 退回半場重置判定
             if (drones[i].role === 'striker' && drones[i].needsReset) {
                 if (drones[i].team === 'red' && drones[i].p.x < 0) drones[i].needsReset = false;
                 if (drones[i].team === 'blue' && drones[i].p.x > 0) drones[i].needsReset = false;
             }
 
+            // 穿越球門得分判定
             if (drones[i].role === 'striker' && !drones[i].needsReset) {
                 const tGoal = drones[i].team === 'red' ? goalPosBlue : goalPosRed;
                 
@@ -506,6 +559,7 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // 啟動轉場動畫 (不啟動物理，只渲染靜態場景)
     animate();
 </script>
 </body>
