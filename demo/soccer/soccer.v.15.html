@@ -2,39 +2,64 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>無人機足球 v0.21 (真實撞擊力學)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>無人機足球 v0.22 (全螢幕與介面優化)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; overscroll-behavior: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
         
-        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 10, 0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 10, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
         .game-title { font-size: 48px; font-weight: bold; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px #44ff44; text-align: center;}
-        .game-subtitle { font-size: 18px; color: #aaa; margin-bottom: 50px; text-align: center;}
-        .btn-mode { background: #223322; color: #fff; border: 2px solid #44ff44; padding: 15px 40px; font-size: 24px; border-radius: 10px; margin: 10px; cursor: pointer; transition: 0.3s; width: 300px; font-weight: bold;}
+        .game-subtitle { font-size: 16px; color: #aaa; margin-bottom: 40px; text-align: center; padding: 0 20px;}
+        .btn-mode { background: #223322; color: #fff; border: 2px solid #44ff44; padding: 15px 40px; font-size: 22px; border-radius: 10px; margin: 10px; cursor: pointer; transition: 0.3s; width: 280px; font-weight: bold;}
         .btn-mode:hover { background: #44ff44; color: #000; box-shadow: 0 0 15px #44ff44; }
 
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
-        #scoreboard { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); text-align: center; background: rgba(0,0,0,0.8); padding: 10px 40px; border-radius: 12px; border: 2px solid #555; box-shadow: 0 4px 15px rgba(0,0,0,0.8); pointer-events: auto;}
-        .score-text { font-size: 38px; font-weight: bold; }
-        .red-score { color: #ff5555; text-shadow: 0 0 15px #ff4444; }
-        .blue-score { color: #5555ff; text-shadow: 0 0 15px #4444ff; }
-        #timer { font-size: 22px; margin-top: 5px; color: #eee; font-family: monospace; }
         
+        /* 修改後的左上角微型計分板 */
+        #scoreboard { 
+            position: absolute; 
+            top: 15px; 
+            left: 15px; 
+            background: rgba(0,0,0,0.65); 
+            padding: 8px 15px; 
+            border-radius: 8px; 
+            border: 1px solid #444; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5); 
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .score-row { display: flex; align-items: center; gap: 10px; }
+        .score-text { font-size: 24px; font-weight: bold; }
+        .red-score { color: #ff5555; text-shadow: 0 0 10px #ff4444; }
+        .blue-score { color: #5555ff; text-shadow: 0 0 10px #4444ff; }
+        #timer { font-size: 18px; color: #eee; font-family: monospace; letter-spacing: 1px; margin-left: 10px; padding-left: 15px; border-left: 1px solid #666;}
+        
+        /* 動態提示詞 */
+        #status-prompt { font-size: 14px; font-weight: bold; text-align: left; transition: color 0.3s; letter-spacing: 1px;}
+
         .touch-ctrl { position: absolute; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.2);}
         
-        #joystick-left { bottom: 40px; left: 40px; width: 130px; height: 130px; }
-        #joystick-right { bottom: 40px; right: 40px; width: 130px; height: 130px; }
+        #joystick-left { bottom: 30px; left: 30px; width: 120px; height: 120px; }
+        #joystick-right { bottom: 30px; right: 30px; width: 120px; height: 120px; }
         
-        #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.8); text-align: center; font-size: 14px; background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 8px; letter-spacing: 1px;}
+        #pc-hint { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.6); text-align: center; font-size: 12px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 5px; letter-spacing: 1px;}
 
         @media (max-width: 768px) { 
             .touch-ctrl { display: block; } 
             #pc-hint { display: none; }
-            #scoreboard { top: 10px; padding: 5px 20px; }
-            .score-text { font-size: 28px; }
-            .game-title { font-size: 36px; }
+            .game-title { font-size: 32px; }
+            .btn-mode { font-size: 18px; padding: 12px 20px; width: 240px; }
+            /* 手機版進一步縮小邊距 */
+            #scoreboard { top: 10px; left: 10px; padding: 6px 12px; }
+            .score-text { font-size: 20px; }
+            #timer { font-size: 16px; margin-left: 5px; padding-left: 10px;}
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -43,18 +68,20 @@
 
     <div id="start-screen">
         <div class="game-title">無人機足球模擬器</div>
-        <div class="game-subtitle">v0.21 | 真實彈性碰撞軌跡與失控硬直系統</div>
+        <div class="game-subtitle">提示：手機請橫放以獲得最佳體驗 (點擊開始將進入全螢幕)</div>
         <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
         <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
     </div>
 
     <div id="ui-layer">
         <div id="scoreboard">
-            <span class="score-text red-score" id="score-red">0</span>
-            <span class="score-text" id="score-dash" style="margin: 0 15px; color: #888;">-</span>
-            <span class="score-text blue-score" id="score-blue">0</span>
-            <div id="timer">03:00</div>
-            <div id="mode-hint" style="font-size: 13px; margin-top:5px; color:#bbb;"></div>
+            <div class="score-row">
+                <span class="score-text red-score" id="score-red">0</span>
+                <span class="score-text" id="score-dash" style="color: #888;">-</span>
+                <span class="score-text blue-score" id="score-blue">0</span>
+                <span id="timer">03:00</span>
+            </div>
+            <div id="status-prompt" style="color: #44ff44;">可以進攻</div>
         </div>
         
         <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
@@ -162,7 +189,6 @@
             this.friction = 0.94; 
             this.needsReset = false;
             
-            // 【新增】失控硬直與自轉參數
             this.stunTimer = 0; 
             this.angularVelocity = new THREE.Vector3(0, 0, 0);
 
@@ -194,13 +220,11 @@
         update(dt) {
             this.prevP.copy(this.p); 
             
-            // 硬直計時器倒數
             if (this.stunTimer > 0) this.stunTimer -= dt;
 
             this.v.multiplyScalar(this.friction);
             this.p.addScaledVector(this.v, dt);
 
-            // 邊界碰撞 (也加入些微硬直與反彈)
             if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
             if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
             if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.7; this.stunTimer=0.1;} 
@@ -211,18 +235,16 @@
             this.group.position.copy(this.p);
             this.group.rotation.y = this.yaw;
             
-            // 視覺特效：飛行錯覺與碰撞自轉
             if(this.v.length() > 5 && this.angularVelocity.lengthSq() < 1) {
                 const axis = new THREE.Vector3(this.v.z, 0, -this.v.x).normalize();
                 this.cageMesh.rotateOnWorldAxis(axis, this.v.length() * dt * 0.04);
             }
             
-            // 撞擊失控自轉
             if (this.angularVelocity.lengthSq() > 0.01) {
                 this.cageMesh.rotation.x += this.angularVelocity.x * dt;
                 this.cageMesh.rotation.y += this.angularVelocity.y * dt;
                 this.cageMesh.rotation.z += this.angularVelocity.z * dt;
-                this.angularVelocity.multiplyScalar(0.9); // 逐漸煞停
+                this.angularVelocity.multiplyScalar(0.9); 
             }
 
             if (this.role === 'striker') {
@@ -279,7 +301,22 @@
     setupJoystick('joystick-left', 'knob-left', joyLeft);
     setupJoystick('joystick-right', 'knob-right', joyRight);
 
+    // 進入全螢幕 API 封裝
+    function requestFullScreen() {
+        let el = document.documentElement;
+        if (el.requestFullscreen) {
+            el.requestFullscreen().catch(err => console.log(err));
+        } else if (el.webkitRequestFullscreen) { /* Safari */
+            el.webkitRequestFullscreen().catch(err => console.log(err));
+        } else if (el.msRequestFullscreen) { /* IE11 */
+            el.msRequestFullscreen().catch(err => console.log(err));
+        }
+    }
+
     function startGame(mode) {
+        // 嘗試進入全螢幕
+        requestFullScreen();
+
         gameMode = mode;
         gameState = 'playing';
         gameTime = 180;
@@ -294,11 +331,9 @@
         if (mode === 'practice') {
             document.getElementById('score-dash').style.display = 'none';
             document.getElementById('score-blue').style.display = 'none';
-            document.getElementById('mode-hint').innerText = "撞到球門框會被彈飛產生硬直，請小心瞄準！";
         } else {
             document.getElementById('score-dash').style.display = 'inline';
             document.getElementById('score-blue').style.display = 'inline';
-            document.getElementById('mode-hint').innerText = "警告：遭到撞擊會暫時失去動力，請善用慣性！";
         }
 
         drones.forEach(d => scene.remove(d.group));
@@ -318,18 +353,15 @@
         clock.start(); 
     }
 
-    // --- 【大幅修正】真實排斥力學與球面滑移 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
         const minDist = d1.radius + d2.radius;
 
         if (dist < minDist && dist > 0) {
-            // 1. 位置修正 (避免穿模)
             const overlap = minDist - dist;
             let normal = diff.clone().normalize();
             
-            // 【球面滑移】加入微小隨機偏斜，避免正向頂死
             normal.x += (Math.random() - 0.5) * 0.4;
             normal.y += (Math.random() - 0.5) * 0.4;
             normal.z += (Math.random() - 0.5) * 0.4;
@@ -339,30 +371,25 @@
             d1.p.addScaledVector(normal, -overlap * (d2.mass / totalMass));
             d2.p.addScaledVector(normal, overlap * (d1.mass / totalMass));
 
-            // 2. 動量轉移與彈性排斥
             const relVel = new THREE.Vector3().subVectors(d1.v, d2.v);
             const speed = relVel.dot(normal);
 
-            // 【強制排斥】即使雙方相對速度很低(互相擠壓)，也會被強制彈開
             let impactSpeed = Math.max(speed, 350); 
-            const e = 0.8; // 高彈性係數(模擬塑膠防護罩)
+            const e = 0.8; 
             const impulse = (1 + e) * impactSpeed / (1/d1.mass + 1/d2.mass);
             
             d1.v.addScaledVector(normal, -impulse / d1.mass);
             d2.v.addScaledVector(normal, impulse / d2.mass);
 
-            // 3. 【失控硬直】撞擊後失去動力 0.25 秒
             d1.stunTimer = 0.25;
             d2.stunTimer = 0.25;
 
-            // 4. 【視覺自轉】防護罩被擦撞產生劇烈旋轉
             const spin = 15;
             d1.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
             d2.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
         }
     }
 
-    // --- 球門實體碰撞同步更新排斥力與硬直 ---
     function resolveGoalCollision(drone, goalCenter, torusR, tubeR) {
         const dx = drone.p.x - goalCenter.x;
         const dy = drone.p.y - goalCenter.y;
@@ -395,19 +422,28 @@
 
             let normal = new THREE.Vector3(nx, ny, nz);
             
-            // 球門撞擊偏斜
             normal.x += (Math.random() - 0.5) * 0.2;
             normal.normalize();
 
             const speed = drone.v.dot(normal);
-            let impactSpeed = Math.max(-speed, 400); // 撞到硬鐵管，基礎排斥力更大
+            let impactSpeed = Math.max(-speed, 400); 
             
             const e = 0.6; 
             drone.v.addScaledVector(normal, (1 + e) * impactSpeed);
             
-            // 撞球門也會產生硬直與旋轉
             drone.stunTimer = 0.2;
             drone.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(20);
+        }
+    }
+
+    function updateStatusPrompt() {
+        const promptEl = document.getElementById('status-prompt');
+        if (player.needsReset) {
+            promptEl.innerText = "已得分請回中場";
+            promptEl.style.color = "#ffaa00"; // 橘黃色警告
+        } else {
+            promptEl.innerText = "可以進攻";
+            promptEl.style.color = "#44ff44"; // 綠色正常
         }
     }
 
@@ -429,7 +465,6 @@
             document.getElementById('timer').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
         }
 
-        // --- 【修改】玩家操控：只有在無硬直(未被撞飛)時才能施加推力 ---
         if (player.stunTimer <= 0) {
             let yawInput = 0;
             if(keys.a) yawInput += 1;
@@ -460,13 +495,10 @@
             player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
         }
 
-        // --- 智能 AI 邏輯 ---
         const timeNow = performance.now();
 
         drones.forEach(d => {
             if(d === player) return;
-            
-            // 【修改】AI 同樣受到硬直限制，被撞時無法推進
             if (d.stunTimer > 0) return; 
 
             if (d.role === 'defender') {
@@ -581,6 +613,9 @@
                 }
             }
         }
+
+        // 更新左上角的動態戰術提示詞
+        updateStatusPrompt();
 
         renderer.render(scene, camera);
     }
