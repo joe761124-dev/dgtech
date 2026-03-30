@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.22 (全螢幕與介面優化)</title>
+    <title>無人機足球 v0.23 (LED環狀燈效)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; overscroll-behavior: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -19,7 +19,6 @@
 
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
         
-        /* 修改後的左上角微型計分板 */
         #scoreboard { 
             position: absolute; 
             top: 15px; 
@@ -40,7 +39,6 @@
         .blue-score { color: #5555ff; text-shadow: 0 0 10px #4444ff; }
         #timer { font-size: 18px; color: #eee; font-family: monospace; letter-spacing: 1px; margin-left: 10px; padding-left: 15px; border-left: 1px solid #666;}
         
-        /* 動態提示詞 */
         #status-prompt { font-size: 14px; font-weight: bold; text-align: left; transition: color 0.3s; letter-spacing: 1px;}
 
         .touch-ctrl { position: absolute; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
@@ -56,7 +54,6 @@
             #pc-hint { display: none; }
             .game-title { font-size: 32px; }
             .btn-mode { font-size: 18px; padding: 12px 20px; width: 240px; }
-            /* 手機版進一步縮小邊距 */
             #scoreboard { top: 10px; left: 10px; padding: 6px 12px; }
             .score-text { font-size: 20px; }
             #timer { font-size: 16px; margin-left: 5px; padding-left: 10px;}
@@ -68,7 +65,7 @@
 
     <div id="start-screen">
         <div class="game-title">無人機足球模擬器</div>
-        <div class="game-subtitle">提示：手機請橫放以獲得最佳體驗 (點擊開始將進入全螢幕)</div>
+        <div class="game-subtitle">v0.23 | 20cm 級賽事 & 14 顆真實 LED 環狀燈</div>
         <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
         <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
     </div>
@@ -194,14 +191,17 @@
 
             this.group = new THREE.Group();
             
+            // 外層防護罩
             const cageMat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true, transparent: true, opacity: 0.7 });
             this.cageMesh = new THREE.Mesh(droneGeoCage, cageMat);
             this.group.add(this.cageMesh);
 
+            // 內層核心
             const coreMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.4 });
             this.coreMesh = new THREE.Mesh(droneGeoCore, coreMat);
             this.group.add(this.coreMesh);
 
+            // 攻擊手頂部標示燈
             if (role === 'striker') {
                 const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 this.indicator = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), lightMat);
@@ -209,10 +209,37 @@
                 this.group.add(this.indicator);
             }
 
-            const headMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-            this.headLight = new THREE.Mesh(new THREE.SphereGeometry(2, 8, 8), headMat);
-            this.headLight.position.set(0, 0, -this.radius); 
-            this.group.add(this.headLight);
+            // 【新增】14 顆環狀 LED 燈陣列
+            const numLEDs = 14;
+            const ringRadius = this.radius + 0.5; // 稍微突出於機架
+            
+            const colorRed = 0xff5555;
+            const colorBlue = 0x5555ff;
+
+            for (let i = 0; i < numLEDs; i++) {
+                // 將圓分成 14 等分，計算 X 與 Z 座標
+                const theta = i * (Math.PI * 2 / numLEDs);
+                const lx = Math.sin(theta) * ringRadius;
+                const lz = -Math.cos(theta) * ringRadius; 
+                
+                // 在 Three.js 的局部座標系中，-Z 為正前方，+Z 為正後方
+                // i = 5, 6, 7, 8, 9 是靠近 +Z 的 5 顆燈 (尾燈區間)
+                const isBackLED = (i >= 5 && i <= 9);
+
+                let ledColorHex;
+                if (this.team === 'red') {
+                    // 紅隊：後面 5 顆是藍色，其他 9 顆是紅色
+                    ledColorHex = isBackLED ? colorBlue : colorRed;
+                } else {
+                    // 藍隊：後面 5 顆是紅色，其他 9 顆是藍色
+                    ledColorHex = isBackLED ? colorRed : colorBlue;
+                }
+
+                const ledMat = new THREE.MeshBasicMaterial({ color: ledColorHex });
+                const ledMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), ledMat);
+                ledMesh.position.set(lx, 0, lz);
+                this.group.add(ledMesh); // 將燈加入至旋轉主體 (不隨防護罩自轉)
+            }
 
             scene.add(this.group);
         }
@@ -301,20 +328,18 @@
     setupJoystick('joystick-left', 'knob-left', joyLeft);
     setupJoystick('joystick-right', 'knob-right', joyRight);
 
-    // 進入全螢幕 API 封裝
     function requestFullScreen() {
         let el = document.documentElement;
         if (el.requestFullscreen) {
             el.requestFullscreen().catch(err => console.log(err));
-        } else if (el.webkitRequestFullscreen) { /* Safari */
+        } else if (el.webkitRequestFullscreen) {
             el.webkitRequestFullscreen().catch(err => console.log(err));
-        } else if (el.msRequestFullscreen) { /* IE11 */
+        } else if (el.msRequestFullscreen) { 
             el.msRequestFullscreen().catch(err => console.log(err));
         }
     }
 
     function startGame(mode) {
-        // 嘗試進入全螢幕
         requestFullScreen();
 
         gameMode = mode;
@@ -440,10 +465,10 @@
         const promptEl = document.getElementById('status-prompt');
         if (player.needsReset) {
             promptEl.innerText = "已得分請回中場";
-            promptEl.style.color = "#ffaa00"; // 橘黃色警告
+            promptEl.style.color = "#ffaa00"; 
         } else {
             promptEl.innerText = "可以進攻";
-            promptEl.style.color = "#44ff44"; // 綠色正常
+            promptEl.style.color = "#44ff44"; 
         }
     }
 
@@ -576,7 +601,6 @@
             }
         });
 
-        // --- 結算與碰撞 ---
         for(let i=0; i<drones.length; i++) {
             drones[i].update(dt);
             
@@ -614,9 +638,7 @@
             }
         }
 
-        // 更新左上角的動態戰術提示詞
         updateStatusPrompt();
-
         renderer.render(scene, camera);
     }
 
