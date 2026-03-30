@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>無人機足球 v0.25 (難易度選擇版)</title>
+    <title>無人機足球 v0.26 (空氣動力學與下洗氣流)</title>
     <style>
         /* --- 基礎設定 --- */
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #05050a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; user-select: none; }
@@ -36,7 +36,7 @@
         .btn-practice:hover { background: rgba(255,255,255,0.1); border-color: #55ccff; color: #55ccff; }
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -20px; margin-bottom: 30px; opacity: 0.8; }
 
-        /* --- 遊戲中 UI (左上角) --- */
+        /* --- 遊戲中 UI --- */
         #top-bar { display: none; padding: 20px; justify-content: space-between; align-items: flex-start; pointer-events: none; }
         #scoreboard { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px; pointer-events: auto; }
         .score-row { display: flex; align-items: center; gap: 15px; }
@@ -69,7 +69,6 @@
         
         #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
 
-        /* RWD 適應手機 */
         @media (max-width: 768px) {
             .touch-ctrl { display: block; }
             #pc-hint { display: none !important; }
@@ -92,7 +91,7 @@
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
         <div class="mobile-hint">提示：手機用戶請橫向擺放以獲得最佳體驗</div>
-        <div class="subtitle">v0.25 | 新增 AI 難易度分級系統</div>
+        <div class="subtitle">v0.26 | 實裝旋翼下洗氣流 (Downwash)</div>
         
         <div class="diff-selector">
             <span class="diff-label">防守難度：</span>
@@ -167,11 +166,10 @@
     const DIFFICULTY_SETTINGS = {
         'easy': { speedBase: 0.35, speedBurst: 0.5, sweepRange: 5, lerpFactor: 0.15 },
         'medium': { speedBase: 0.45, speedBurst: 0.65, sweepRange: 15, lerpFactor: 0.25 },
-        'hard': { speedBase: 0.55, speedBurst: 0.8, sweepRange: 25, lerpFactor: 0.4 } // 原始預設
+        'hard': { speedBase: 0.55, speedBurst: 0.8, sweepRange: 25, lerpFactor: 0.4 }
     };
     let currentDifficulty = 'hard';
 
-    // UI 切換難度
     function setDifficulty(level) {
         currentDifficulty = level;
         document.querySelectorAll('.btn-diff').forEach(btn => {
@@ -231,7 +229,6 @@
             this.coreMesh = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 16), coreMat);
             this.group.add(this.coreMesh);
 
-            // 14顆 LED 環狀陣列
             const numLEDs = 14;
             const ringRadius = this.radius + 0.5;
             for (let i = 0; i < numLEDs; i++) {
@@ -360,6 +357,7 @@
         else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen().catch(()=>{});
     }
 
+    // --- 物理系統 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -409,6 +407,37 @@
         }
     }
 
+    // --- 【新增】空氣動力學 (下洗氣流) 演算法 ---
+    function applyAerodynamics(d1, d2, dt) {
+        // d1 對 d2 產生的向下氣流影響 (d2 在 d1 下方)
+        let dy = d2.p.y - d1.p.y;
+        if (dy < 0 && dy > -150) { // 氣流有效深度 1.5m
+            let distXZ = Math.hypot(d2.p.x - d1.p.x, d2.p.z - d1.p.z);
+            let coneRadius = 20 + Math.abs(dy) * 0.3; // 氣流錐向下擴散
+            
+            if (distXZ < coneRadius) {
+                // 強度依賴於距離，越近越強
+                let intensity = 1.0 - (Math.abs(dy) / 150);
+                let downwashForce = 1500 * intensity * dt; // 產生強烈的向下加速度
+                
+                // 向下壓制
+                d2.v.y -= downwashForce;
+                
+                // 擾流邊緣的往外推擠力 (散射)
+                if (distXZ > 1.0) {
+                    let scatterForce = downwashForce * 0.25;
+                    d2.v.x += ((d2.p.x - d1.p.x) / distXZ) * scatterForce;
+                    d2.v.z += ((d2.p.z - d1.p.z) / distXZ) * scatterForce;
+                }
+                
+                // 氣流會讓下方的無人機姿態稍微失控 (微小旋轉)
+                d2.angularVelocity.x += (Math.random() - 0.5) * 5 * dt;
+                d2.angularVelocity.z += (Math.random() - 0.5) * 5 * dt;
+            }
+        }
+    }
+
+    // --- 主渲染迴圈 ---
     function animate() {
         if (gameState !== 'playing') {
             clock.getDelta(); 
@@ -419,7 +448,6 @@
 
         const dt = Math.min(clock.getDelta(), 0.1);
 
-        // --- 玩家輸入 ---
         if (player && player.stunTimer <= 0) {
             let yawInput = (keys["a"] ? 1 : 0) + (keys["d"] ? -1 : 0) - joyLeft.x;
             player.yaw += yawInput * player.yawSpeed * dt;
@@ -436,27 +464,20 @@
         const timeNow = performance.now();
         const goalPosRed = new THREE.Vector3(-GOAL_X, GOAL_Y, 0);
         const goalPosBlue = new THREE.Vector3(GOAL_X, GOAL_Y, 0);
-        
-        // 取得目前選擇的 AI 難易度參數
         const diffConfig = DIFFICULTY_SETTINGS[currentDifficulty];
 
-        // --- 智能 AI (套用難度參數) ---
         drones.forEach(d => {
             if (d === player || d.stunTimer > 0) return;
             
             if (d.role === "defender") {
                 const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === "striker");
                 if (enemyStriker) {
-                    // 【難度應用】防守員追蹤位置 (lerpFactor 決定積極度)
                     let target = new THREE.Vector3().copy(d.team === "red" ? goalPosRed : goalPosBlue).lerp(enemyStriker.p, diffConfig.lerpFactor);
-                    
-                    // 【難度應用】防守員掃掠範圍 (sweepRange 決定移動幅度)
                     target.z += Math.sin(timeNow * 0.003 + d.p.x) * diffConfig.sweepRange; 
                     target.y += Math.cos(timeNow * 0.004 + d.p.y) * diffConfig.sweepRange;
                     
                     const dir = new THREE.Vector3().subVectors(target, d.p);
                     if (dir.length() > 10) {
-                        // 【難度應用】防守推擠速度
                         let defSpeedMult = (enemyStriker.p.distanceTo(d.team === "red" ? goalPosRed : goalPosBlue) < 150) ? diffConfig.speedBurst : diffConfig.speedBase;
                         d.v.addScaledVector(dir.normalize(), d.speed * dt * defSpeedMult);
                         d.yaw = Math.atan2(-dir.x, -dir.z);
@@ -468,18 +489,17 @@
                 else target.copy(d.team === "red" ? goalPosBlue : goalPosRed);
                 
                 let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
-                let speedMult = diffConfig.speedBase; // AI 攻擊手速度也受難度影響
+                let speedMult = diffConfig.speedBase; 
                 
                 if (!d.needsReset) {
                     let closestDef = null, minDefDist = Infinity;
                     drones.forEach(other => { if (other.team !== d.team && other.role === 'defender' && d.p.distanceTo(other.p) < minDefDist) { minDefDist = d.p.distanceTo(other.p); closestDef = other; }});
                     
-                    // 根據難度決定 AI 攻擊手的迴避反應距離
                     let evasionDist = currentDifficulty === 'easy' ? 100 : 150;
 
                     if (closestDef && minDefDist < evasionDist && dir.dot(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize()) > 0.5) {
                         if (d.p.distanceTo(target) < 200) {
-                            speedMult = diffConfig.speedBurst + 0.2; // 衝刺
+                            speedMult = diffConfig.speedBurst + 0.2; 
                             if (d.v.length() < 300) { 
                                 let slipDir = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize(), new THREE.Vector3(0,1,0)).normalize();
                                 if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
@@ -498,11 +518,19 @@
             }
         });
 
-        // --- 物理結算 ---
+        // 物理與空氣動力學結算
         for (let i = 0; i < drones.length; i++) {
             const d1 = drones[i];
             d1.update(dt);
-            for (let j = i + 1; j < drones.length; j++) resolveCollision(d1, drones[j]);
+            
+            for (let j = i + 1; j < drones.length; j++) {
+                const d2 = drones[j];
+                resolveCollision(d1, d2);
+                
+                // 【觸發氣流】互相計算是否在對方的氣流錐內
+                applyAerodynamics(d1, d2, dt);
+                applyAerodynamics(d2, d1, dt);
+            }
 
             resolveGoalCollision(d1, -GOAL_X, GOAL_Y, 0);
             resolveGoalCollision(d1, GOAL_X, GOAL_Y, 0);
