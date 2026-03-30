@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>無人機足球 v0.19 (20cm F9A-B 賽事)</title>
+    <title>無人機足球 v0.20 (AI 防卡死升級)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -43,7 +43,7 @@
 
     <div id="start-screen">
         <div class="game-title">無人機足球模擬器</div>
-        <div class="game-subtitle">v0.19 | FAI F9A-B 20cm 級標準賽場 (8x4x3m)</div>
+        <div class="game-subtitle">v0.20 | F9A-B 20cm 級 (搭載 AI 防卡死游移系統)</div>
         <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
         <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
     </div>
@@ -60,24 +60,22 @@
         <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
         <div id="joystick-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
 
-        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與左右轉向 | 右手↑↓←→：前後推飛與左右平移</div>
+        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與轉向 | 右手↑↓←→：俯仰與翻滾平移</div>
     </div>
 
 <script>
-    // --- 1. FAI 20cm 級標準尺寸設定 (1單位 = 1公分) ---
-    const pitch = { w: 800, h: 300, d: 400 }; // 場地 8m x 3m x 4m
-    const droneRadius = 10; // 20cm 級無人機 (半徑10)
-    const goalInnerRadius = 20; // 內徑 40cm (半徑20)
-    const goalTubeRadius = 3; // 管徑 6cm (半徑3)
-    const torusRadius = goalInnerRadius + goalTubeRadius; // 23
-    const goalY = 150; // 離地高度 1.5m
-    const goalX = pitch.w / 2 - 100; // 距離底線 1m (X = ±300)
+    const pitch = { w: 800, h: 300, d: 400 }; 
+    const droneRadius = 10; 
+    const goalInnerRadius = 20; 
+    const goalTubeRadius = 3; 
+    const torusRadius = goalInnerRadius + goalTubeRadius; 
+    const goalY = 150; 
+    const goalX = pitch.w / 2 - 100; 
 
     const scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x111115, 600, 2500);
 
     const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 3000);
-    // 攝影機對應小場地往前推進
     camera.position.set(-pitch.w/2 - 200, pitch.h/2 + 150, 0); 
     camera.lookAt(0, pitch.h/2 - 50, 0); 
 
@@ -92,7 +90,6 @@
     dirLight.position.set(0, pitch.h + 200, 100);
     scene.add(dirLight);
 
-    // --- 2. 場地與防護網 ---
     const floorGeo = new THREE.PlaneGeometry(pitch.w, pitch.d);
     const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a2a1a, roughness: 0.9 });
     const floor = new THREE.Mesh(floorGeo, floorMat);
@@ -100,8 +97,6 @@
     scene.add(floor);
 
     const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
-
-    // 場地邊界
     const borderGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(-pitch.w/2, 2, -pitch.d/2), new THREE.Vector3(pitch.w/2, 2, -pitch.d/2),
         new THREE.Vector3(pitch.w/2, 2, pitch.d/2), new THREE.Vector3(-pitch.w/2, 2, pitch.d/2),
@@ -109,13 +104,11 @@
     ]);
     scene.add(new THREE.Line(borderGeo, lineMat));
 
-    // 中線
     const centerLineGeo = new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(0, 2, -pitch.d/2), new THREE.Vector3(0, 2, pitch.d/2)
     ]);
     scene.add(new THREE.Line(centerLineGeo, lineMat));
 
-    // 中圈 (直徑 2m = 半徑 100)
     const circleGeo = new THREE.RingGeometry(95, 100, 64);
     const circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     const centerCircle = new THREE.Mesh(circleGeo, circleMat);
@@ -123,14 +116,12 @@
     centerCircle.position.y = 2;
     scene.add(centerCircle);
 
-    // 防護網
     const netGeo = new THREE.BoxGeometry(pitch.w, pitch.h, pitch.d);
     const netMat = new THREE.MeshBasicMaterial({ color: 0x445544, wireframe: true, transparent: true, opacity: 0.15 });
     const netMesh = new THREE.Mesh(netGeo, netMat);
     netMesh.position.y = pitch.h / 2;
     scene.add(netMesh);
 
-    // --- 3. 球門與無人機 ---
     const goalPosRed = new THREE.Vector3(-goalX, goalY, 0);
     const goalPosBlue = new THREE.Vector3(goalX, goalY, 0);
 
@@ -146,7 +137,6 @@
         defCircle.rotation.x = -Math.PI / 2;
         defCircle.position.set(position.x, 2, position.z);
         scene.add(defCircle);
-
         return mesh;
     }
     createGoal(goalPosRed, 0xff5555);
@@ -166,7 +156,7 @@
             this.color = color;
             this.role = role;
             this.team = team;
-            this.speed = 1200; // 適配小場地稍微調降極速，保持手感
+            this.speed = 1200; 
             this.yawSpeed = 3.5; 
             this.friction = 0.94; 
             this.needsReset = false;
@@ -223,7 +213,6 @@
         }
     }
 
-    // --- 4. 遊戲狀態與輸入系統 ---
     let gameState = 'menu'; 
     let gameMode = '3v3';
     let drones = [];
@@ -272,7 +261,6 @@
     setupJoystick('joystick-left', 'knob-left', joyLeft);
     setupJoystick('joystick-right', 'knob-right', joyRight);
 
-    // --- 5. 遊戲初始化 ---
     function startGame(mode) {
         gameMode = mode;
         gameState = 'playing';
@@ -288,17 +276,16 @@
         if (mode === 'practice') {
             document.getElementById('score-dash').style.display = 'none';
             document.getElementById('score-blue').style.display = 'none';
-            document.getElementById('mode-hint').innerText = "20cm 級單人練習：適應 1.5m 高度與更窄的球門！";
+            document.getElementById('mode-hint').innerText = "單人練習：適應 1.5m 高度與更窄的球門！";
         } else {
             document.getElementById('score-dash').style.display = 'inline';
             document.getElementById('score-blue').style.display = 'inline';
-            document.getElementById('mode-hint').innerText = "20cm 級 3v3 競賽：突破防線，射門得分！";
+            document.getElementById('mode-hint').innerText = "注意：防守員已具備動態推擠防禦能力！";
         }
 
         drones.forEach(d => scene.remove(d.group));
         drones = [];
 
-        // 雙方出生在底線預備區 (距離球門後方 50cm)
         drones.push(new Drone(-goalX - 50, 30, 0, 0xff5555, 'striker', 'red')); 
         
         if (mode === '3v3') {
@@ -313,7 +300,6 @@
         clock.start(); 
     }
 
-    // --- 6. 物理碰撞核心 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -377,7 +363,6 @@
         }
     }
 
-    // --- 7. 主迴圈 ---
     function animate() {
         requestAnimationFrame(animate);
         
@@ -425,7 +410,9 @@
         player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
         player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
 
-        // --- 智能 AI 邏輯 ---
+        // --- 智能 AI 邏輯 (包含防卡死與主動掃掠) ---
+        const timeNow = performance.now();
+
         drones.forEach(d => {
             if(d === player) return;
             
@@ -434,11 +421,20 @@
                 const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
                 if(!enemyStriker) return; 
 
+                // 攔截點計算
                 let target = new THREE.Vector3().copy(myGoal).lerp(enemyStriker.p, 0.4); 
+                
+                // 【修正 1: 主動掃掠防禦】 讓防守員在攔截點上進行 8 字型游移，避免死鎖
+                const sweepRange = 25; 
+                target.z += Math.sin(timeNow * 0.003 + d.p.x) * sweepRange;
+                target.y += Math.cos(timeNow * 0.004 + d.p.y) * sweepRange;
+
                 const dir = new THREE.Vector3().subVectors(target, d.p);
-                if(dir.length() > 20) {
+                if(dir.length() > 10) { // 減少死區，保持動態
                     dir.normalize();
-                    d.v.addScaledVector(dir, d.speed * dt * 0.55); 
+                    // 【修正 2: 爆發推擠】如果敵方攻擊手極度靠近球門，防守員會瞬間加強推力把對方擠出去
+                    let defSpeedMult = (enemyStriker.p.distanceTo(myGoal) < 150) ? 0.8 : 0.55;
+                    d.v.addScaledVector(dir, d.speed * dt * defSpeedMult); 
                     d.yaw = Math.atan2(-dir.x, -dir.z); 
                 }
             } 
@@ -463,16 +459,31 @@
                         }
                     });
 
-                    // 縮短 AI 的判斷距離 (對應 20cm 場地)
+                    // 遇到防守員阻擋
                     if (closestDef && minDefDist < 150) {
                         let toDef = new THREE.Vector3().subVectors(closestDef.p, d.p).normalize();
-                        let isBlocking = dir.dot(toDef) > 0.6; 
+                        let isBlocking = dir.dot(toDef) > 0.5; // 放寬阻擋判定角度
 
                         if (isBlocking) {
                             let distToGoal = d.p.distanceTo(target);
+                            
+                            // 距離夠近，啟動衝撞
                             if (distToGoal < 200) {
                                 speedMult = 1.0; 
+                                
+                                // 【修正 3: 泥鰍滑步防卡死】 油門全開但速度卻很慢(被卡住了)
+                                if (d.v.length() < 300) { 
+                                    // 產生垂直於敵人的側向/上下滑步推力
+                                    let slipDir = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
+                                    // 利用時間函數保持短暫的同向滑步，避免左右互抵
+                                    if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
+                                    
+                                    dir.addScaledVector(slipDir, 1.5);
+                                    dir.y += Math.cos(timeNow * 0.006) * 1.5; // 上下鑽
+                                    dir.normalize();
+                                }
                             } else {
+                                // 遠距離標準閃避
                                 let lateralVec = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
                                 let relativePos = new THREE.Vector3().subVectors(d.p, closestDef.p);
                                 if (relativePos.dot(lateralVec) < 0) lateralVec.negate();
@@ -515,7 +526,6 @@
 
                 if (crossedPlane) {
                     const distFromCenter = Math.hypot(drones[i].p.y - tGoal.y, drones[i].p.z - tGoal.z);
-                    
                     if (distFromCenter < goalInnerRadius) {
                         drones[i].needsReset = true;
                         if(drones[i].team === 'red') {
