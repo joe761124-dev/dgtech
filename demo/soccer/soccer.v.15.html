@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>無人機足球 v0.15 (力學與計分修正版)</title>
+    <title>無人機足球 v0.16 (智能 AI 突破版)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; }
         canvas { display: block; width: 100vw; height: 100vh; }
@@ -39,7 +39,7 @@
             <span class="score-text" style="margin: 0 15px; color: #888;">-</span>
             <span class="score-text blue-score" id="score-blue">0</span>
             <div id="timer">03:00</div>
-            <div style="font-size: 13px; margin-top:5px; color:#bbb;">v0.15: 嚴格穿越判定 & 實體球門碰撞</div>
+            <div style="font-size: 13px; margin-top:5px; color:#bbb;">v0.16: AI 攻擊手懂得閃避與撞擊</div>
         </div>
         
         <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
@@ -105,8 +105,8 @@
     scene.add(netMesh);
 
     // --- 3. 球門與無人機 ---
-    const goalRadius = 60; // 球門內徑
-    const goalTube = 5;    // 球門外框粗細
+    const goalRadius = 60; 
+    const goalTube = 5;    
     const goalY = pitch.h / 2; 
     const goalPosRed = new THREE.Vector3(-pitch.w/2 + 150, goalY, 0);
     const goalPosBlue = new THREE.Vector3(pitch.w/2 - 150, goalY, 0);
@@ -135,7 +135,7 @@
     class Drone {
         constructor(x, y, z, color, role, team) {
             this.p = new THREE.Vector3(x, y, z);
-            this.prevP = new THREE.Vector3(x, y, z); // 記錄上一幀位置，用於平面穿越判定
+            this.prevP = new THREE.Vector3(x, y, z); 
             this.v = new THREE.Vector3(0, 0, 0);
             this.yaw = team === 'red' ? -Math.PI/2 : Math.PI/2; 
             this.radius = 25;
@@ -174,12 +174,11 @@
         }
 
         update(dt) {
-            this.prevP.copy(this.p); // 儲存上一幀位置
+            this.prevP.copy(this.p); 
 
             this.v.multiplyScalar(this.friction);
             this.p.addScaledVector(this.v, dt);
 
-            // 邊界防護網反彈
             if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.6; }
             if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.6; }
             if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.6; } 
@@ -273,8 +272,6 @@
     setupJoystick('joystick-right', 'knob-right', joyRight);
 
     // --- 5. 物理碰撞核心 ---
-    
-    // 【修正 1】無人機之間的真實力學碰撞
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -283,19 +280,16 @@
         if (dist < minDist && dist > 0) {
             const normal = diff.clone().normalize();
             
-            // 步驟A: 位置修正 (防止穿模與無限擠壓)
             const overlap = minDist - dist;
             const totalMass = d1.mass + d2.mass;
             d1.p.addScaledVector(normal, -overlap * (d2.mass / totalMass));
             d2.p.addScaledVector(normal, overlap * (d1.mass / totalMass));
 
-            // 步驟B: 動能轉移
             const relVel = new THREE.Vector3().subVectors(d1.v, d2.v);
             const speed = relVel.dot(normal);
 
-            // 只有當兩者互相靠近時才施加碰撞推力
             if (speed > 0) {
-                const e = 0.5; // 彈性係數(模擬塑膠籠的摩擦與吸震)
+                const e = 0.5; 
                 const impulse = (1 + e) * speed / (1/d1.mass + 1/d2.mass);
                 
                 d1.v.addScaledVector(normal, -impulse / d1.mass);
@@ -304,7 +298,6 @@
         }
     }
 
-    // 【修正 2】球門實體邊框(Torus)碰撞
     function resolveGoalCollision(drone, goalPos, R, r) {
         const dx = drone.p.x - goalPos.x;
         const dy = drone.p.y - goalPos.y;
@@ -332,17 +325,15 @@
             const ny = diffY / distToRing;
             const nz = diffZ / distToRing;
 
-            // 位置修正(彈出球門邊框)
             const overlap = minDist - distToRing;
             drone.p.x += nx * overlap;
             drone.p.y += ny * overlap;
             drone.p.z += nz * overlap;
 
-            // 反彈動能
             const normal = new THREE.Vector3(nx, ny, nz);
             const speed = drone.v.dot(normal);
             if (speed < 0) {
-                const e = 0.4; // 球門反彈係數
+                const e = 0.4; 
                 drone.v.addScaledVector(normal, -(1 + e) * speed);
             }
         }
@@ -390,27 +381,79 @@
         player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
         player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
 
-        // --- AI 邏輯 ---
+        // --- 智能 AI 邏輯 ---
         drones.forEach(d => {
             if(d === player) return;
-            let target = new THREE.Vector3(d.p.x, d.p.y, d.p.z);
-
-            if(d.role === 'striker') {
+            
+            // AI 防守員邏輯 (追蹤敵方攻擊手並擋在球門前)
+            if (d.role === 'defender') {
+                const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
+                const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
+                let target = new THREE.Vector3().copy(myGoal).lerp(enemyStriker.p, 0.4); 
+                
+                const dir = new THREE.Vector3().subVectors(target, d.p);
+                if(dir.length() > 20) {
+                    dir.normalize();
+                    d.v.addScaledVector(dir, d.speed * dt * 0.55); 
+                    d.yaw = Math.atan2(-dir.x, -dir.z); 
+                }
+            } 
+            // AI 攻擊手邏輯 (智能閃避與撞擊)
+            else if (d.role === 'striker') {
+                let target = new THREE.Vector3();
                 if(d.needsReset) {
                     target.set(d.team==='red'? -200:200, goalY, 0); 
                 } else {
                     target.copy(d.team==='red'? goalPosBlue : goalPosRed); 
                 }
-            } else if (d.role === 'defender') {
-                const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
-                const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
-                target.copy(myGoal).lerp(enemyStriker.p, 0.4); // 攔截路徑
-            }
 
-            const dir = new THREE.Vector3().subVectors(target, d.p);
-            if(dir.length() > 20) {
-                dir.normalize();
-                d.v.addScaledVector(dir, d.speed * dt * 0.55); 
+                let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
+                let speedMult = 0.55; // 預設巡航速度
+                
+                if (!d.needsReset) {
+                    // 1. 尋找擋在路上的防守員
+                    let closestDef = null;
+                    let minDefDist = Infinity;
+                    drones.forEach(other => {
+                        if (other.team !== d.team && other.role === 'defender') {
+                            let dist = d.p.distanceTo(other.p);
+                            if (dist < minDefDist) {
+                                minDefDist = dist;
+                                closestDef = other;
+                            }
+                        }
+                    });
+
+                    if (closestDef && minDefDist < 250) {
+                        let toDef = new THREE.Vector3().subVectors(closestDef.p, d.p).normalize();
+                        let isBlocking = dir.dot(toDef) > 0.6; // 判斷防守員是否在正前方
+
+                        if (isBlocking) {
+                            let distToGoal = d.p.distanceTo(target);
+
+                            if (distToGoal < 300) {
+                                // 【暴力突破】距離球門很近了，放棄閃避，全速撞開防守員！
+                                speedMult = 1.0; 
+                            } else {
+                                // 【迂迴閃避】產生一個垂直於進攻方向的側推力 (Lateral Dodge)
+                                let lateralVec = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
+                                
+                                // 判斷防守員偏左還是偏右，決定往反方向閃
+                                let relativePos = new THREE.Vector3().subVectors(d.p, closestDef.p);
+                                if (relativePos.dot(lateralVec) < 0) lateralVec.negate();
+                                
+                                // 混合原路線與側推力
+                                dir.addScaledVector(lateralVec, 1.2).normalize();
+                                
+                                // 上下高度閃避
+                                if (d.p.y < closestDef.p.y) dir.y -= 0.5; else dir.y += 0.5;
+                                dir.normalize();
+                            }
+                        }
+                    }
+                }
+
+                d.v.addScaledVector(dir, d.speed * dt * speedMult); 
                 d.yaw = Math.atan2(-dir.x, -dir.z); 
             }
         });
@@ -419,34 +462,27 @@
         for(let i=0; i<drones.length; i++) {
             drones[i].update(dt);
             
-            // 計算與其他無人機的碰撞
             for(let j=i+1; j<drones.length; j++) resolveCollision(drones[i], drones[j]);
 
-            // 計算與雙方球門邊框的實體碰撞
             resolveGoalCollision(drones[i], goalPosRed, goalRadius, goalTube);
             resolveGoalCollision(drones[i], goalPosBlue, goalRadius, goalTube);
 
-            // FAI規則：得分後退回半場解除限制
             if (drones[i].role === 'striker' && drones[i].needsReset) {
                 if (drones[i].team === 'red' && drones[i].p.x < 0) drones[i].needsReset = false;
                 if (drones[i].team === 'blue' && drones[i].p.x > 0) drones[i].needsReset = false;
             }
 
-            // 【修正 3】嚴格的得分判定：必須穿越 X 平面，且在圓環半徑內
             if (drones[i].role === 'striker' && !drones[i].needsReset) {
                 const tGoal = drones[i].team === 'red' ? goalPosBlue : goalPosRed;
                 
                 let crossedPlane = false;
                 if (drones[i].team === 'red') {
-                    // 紅隊由 -X 往 +X 飛，穿越藍球門
                     if (drones[i].prevP.x <= tGoal.x && drones[i].p.x > tGoal.x) crossedPlane = true;
                 } else {
-                    // 藍隊由 +X 往 -X 飛，穿越紅球門
                     if (drones[i].prevP.x >= tGoal.x && drones[i].p.x < tGoal.x) crossedPlane = true;
                 }
 
                 if (crossedPlane) {
-                    // 檢查穿越瞬間的 Y/Z 是否在球門孔徑內
                     const distFromCenter = Math.hypot(drones[i].p.y - tGoal.y, drones[i].p.z - tGoal.z);
                     
                     if (distFromCenter < goalRadius) {
