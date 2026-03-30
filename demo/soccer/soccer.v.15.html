@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>無人機足球 v0.26 (空氣動力學與下洗氣流)</title>
+    <title>無人機足球 v0.27 (真人 160cm 操控視角)</title>
     <style>
         /* --- 基礎設定 --- */
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #05050a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; user-select: none; }
@@ -11,7 +11,6 @@
         
         /* --- UI 共用圖層 --- */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; }
-        .glass-panel { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
         .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; }
         .btn:active { transform: scale(0.95); }
 
@@ -36,17 +35,18 @@
         .btn-practice:hover { background: rgba(255,255,255,0.1); border-color: #55ccff; color: #55ccff; }
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -20px; margin-bottom: 30px; opacity: 0.8; }
 
-        /* --- 遊戲中 UI --- */
+        /* --- 遊戲中 UI (FPV 真人操控視角風格) --- */
         #top-bar { display: none; padding: 20px; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-        #scoreboard { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px; pointer-events: auto; }
-        .score-row { display: flex; align-items: center; gap: 15px; }
-        .score-num { font-size: 32px; font-weight: 900; }
-        .score-red { color: #ff5555; text-shadow: 0 0 12px rgba(255,85,85,0.8); }
-        .score-blue { color: #5555ff; text-shadow: 0 0 12px rgba(85,85,255,0.8); }
-        .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
-        .timer-box { border-left: 1px solid rgba(255,255,255,0.2); padding-left: 15px; font-family: monospace; font-size: 20px; font-weight: bold; letter-spacing: 2px; }
-        .timer-urgent { color: #ffaa00; animation: pulse 1s infinite; }
-        #status-prompt { font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #44ff44; transition: color 0.3s; }
+        
+        /* 懸浮發光資訊屏 (模擬 FPV 飛行眼鏡 UI) */
+        #fpv-scoreboard { position: absolute; top: 10vh; left: 10vw; pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.03); padding: 15px 25px; border-radius: 5px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'OCRA', monospace; }
+        .fpv-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 5px; }
+        .fpv-num { font-size: 28px; font-weight: bold; color: #44ff44; text-shadow: 0 0 8px #44ff44;}
+        .fpv-score-red { color: #ff5555; text-shadow: 0 0 10px #ff5555;}
+        .fpv-label { font-size: 12px; color: #44ff44; letter-spacing: 1px; }
+        .fpv-timer { font-size: 18px; color: #44ff44; text-shadow: 0 0 5px #44ff44;}
+        .timer-urgent { color: #ffaa00; text-shadow: 0 0 10px #ffaa00; animation: pulse 1s infinite; }
+        #status-prompt { font-size: 12px; font-weight: bold; letter-spacing: 1px; color: #44ff44; margin-top: 10px;}
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
@@ -58,6 +58,9 @@
         .fs-team { display: flex; flex-direction: column; align-items: center; }
         .fs-num { font-size: 80px; font-weight: 900; }
         .fs-label { font-size: 12px; font-weight: bold; letter-spacing: 2px; opacity: 0.7; margin-top: 5px; }
+        .score-red { color: #ff5555; text-shadow: 0 0 15px rgba(255,85,85,0.7); }
+        .score-blue { color: #5555ff; text-shadow: 0 0 15px rgba(85,85,255,0.7); }
+        .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
         .btn-restart { background: #fff; color: #000; padding: 16px 40px; font-size: 18px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
         .btn-restart:hover { transform: scale(1.05); }
 
@@ -67,16 +70,15 @@
         #joy-left { left: 30px; }
         #joy-right { right: 30px; }
         
-        #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
+        #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
 
         @media (max-width: 768px) {
             .touch-ctrl { display: block; }
             #pc-hint { display: none !important; }
             .title { font-size: 40px; }
-            #top-bar { padding: 10px; }
-            #scoreboard { padding: 8px 15px; }
-            .score-num { font-size: 24px; }
-            .timer-box { font-size: 16px; padding-left: 10px; gap: 10px;}
+            #fpv-scoreboard { left: 5vw; padding: 10px; }
+            .fpv-num { font-size: 24px; }
+            .fpv-timer { font-size: 16px; }
             .fs-num { font-size: 60px; }
             .final-score-box { gap: 20px; }
         }
@@ -91,7 +93,7 @@
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
         <div class="mobile-hint">提示：手機用戶請橫向擺放以獲得最佳體驗</div>
-        <div class="subtitle">v0.26 | 實裝旋翼下洗氣流 (Downwash)</div>
+        <div class="subtitle">v0.27 | 身高 160cm 真人飛手操控視角</div>
         
         <div class="diff-selector">
             <span class="diff-label">防守難度：</span>
@@ -106,20 +108,26 @@
 
     <div id="ui-layer">
         <div id="top-bar">
-            <div id="scoreboard" class="glass-panel">
-                <div class="score-row">
-                    <span class="score-num score-red" id="score-red">0</span>
-                    <span class="score-dash" id="score-dash">-</span>
-                    <span class="score-num score-blue" id="score-blue">0</span>
-                    <span class="timer-box" id="timer">03:00</span>
+            <div id="fpv-scoreboard">
+                <div class="fpv-score-row">
+                    <span class="fpv-num fpv-score-red" id="score-red">00</span>
+                    <span class="fpv-label">紅隊 SCORE</span>
                 </div>
-                <div id="status-prompt">🟢 可以進攻</div>
+                <div class="fpv-score-row" id="fpv-blue-row">
+                    <span class="fpv-num" id="score-blue" style="color: #5555ff; text-shadow: 0 0 10px #5555ff;">00</span>
+                    <span class="fpv-label" style="color: #5555ff;">藍隊 SCORE</span>
+                </div>
+                <div class="fpv-score-row" style="margin-top: 10px;">
+                    <span class="fpv-timer" id="timer">03:00</span>
+                    <span class="fpv-label">剩餘時間 REMAINING</span>
+                </div>
+                <div id="status-prompt">🟢 可以進攻 STATUS: OK</div>
             </div>
         </div>
 
         <div id="joy-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
         <div id="joy-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
-        <div id="pc-hint" class="glass-panel">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移</div>
+        <div id="pc-hint">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移</div>
     </div>
 
     <div id="gameover-screen">
@@ -229,6 +237,7 @@
             this.coreMesh = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 16), coreMat);
             this.group.add(this.coreMesh);
 
+            // 14顆 LED 環狀陣列
             const numLEDs = 14;
             const ringRadius = this.radius + 0.5;
             for (let i = 0; i < numLEDs; i++) {
@@ -290,8 +299,12 @@
         scene.fog = new THREE.Fog(0x05050a, 600, 2500);
 
         camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 3000);
-        camera.position.set(-PITCH.w / 2 - 200, PITCH.h / 2 + 150, 0);
-        camera.lookAt(0, PITCH.h / 2 - 50, 0);
+        
+        // --- 【修改視角】身高 160cm 真人操控視點 ---
+        // Y = 160 (高度); X, Z 位於紅隊一側外圍
+        camera.position.set(-PITCH.w / 2 - 120, 160, 0); 
+        // 攝影機朝向球場中心稍微偏紅隊區域
+        camera.lookAt(-100, 120, 0); 
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -330,8 +343,9 @@
     }
 
     function updateUI() {
-        document.getElementById('score-red').innerText = score.red;
-        document.getElementById('score-blue').innerText = score.blue;
+        // 更新計分與時間，補零以呈現電競風
+        document.getElementById('score-red').innerText = score.red.toString().padStart(2, '0');
+        document.getElementById('score-blue').innerText = score.blue.toString().padStart(2, '0');
         
         let m = Math.floor(timeLeft / 60);
         let s = Math.floor(timeLeft % 60);
@@ -343,10 +357,10 @@
 
         const promptEl = document.getElementById('status-prompt');
         if (player && player.needsReset) {
-            promptEl.innerText = "⚠️ 已得分，請回中場重置";
+            promptEl.innerText = "⚠️ 已得分，請回中場重置 RESET REQUIRED";
             promptEl.style.color = "#ffaa00";
         } else {
-            promptEl.innerText = "🟢 可以進攻";
+            promptEl.innerText = "🟢 可以進攻 STATUS: OK";
             promptEl.style.color = "#44ff44";
         }
     }
@@ -407,7 +421,7 @@
         }
     }
 
-    // --- 【新增】空氣動力學 (下洗氣流) 演算法 ---
+    // --- 空氣動力學 (下洗氣流) 演算法 ---
     function applyAerodynamics(d1, d2, dt) {
         // d1 對 d2 產生的向下氣流影響 (d2 在 d1 下方)
         let dy = d2.p.y - d1.p.y;
@@ -418,19 +432,16 @@
             if (distXZ < coneRadius) {
                 // 強度依賴於距離，越近越強
                 let intensity = 1.0 - (Math.abs(dy) / 150);
-                let downwashForce = 1500 * intensity * dt; // 產生強烈的向下加速度
+                let downwashForce = 1500 * intensity * dt; 
                 
-                // 向下壓制
                 d2.v.y -= downwashForce;
                 
-                // 擾流邊緣的往外推擠力 (散射)
                 if (distXZ > 1.0) {
                     let scatterForce = downwashForce * 0.25;
                     d2.v.x += ((d2.p.x - d1.p.x) / distXZ) * scatterForce;
                     d2.v.z += ((d2.p.z - d1.p.z) / distXZ) * scatterForce;
                 }
                 
-                // 氣流會讓下方的無人機姿態稍微失控 (微小旋轉)
                 d2.angularVelocity.x += (Math.random() - 0.5) * 5 * dt;
                 d2.angularVelocity.z += (Math.random() - 0.5) * 5 * dt;
             }
@@ -518,7 +529,6 @@
             }
         });
 
-        // 物理與空氣動力學結算
         for (let i = 0; i < drones.length; i++) {
             const d1 = drones[i];
             d1.update(dt);
@@ -526,8 +536,6 @@
             for (let j = i + 1; j < drones.length; j++) {
                 const d2 = drones[j];
                 resolveCollision(d1, d2);
-                
-                // 【觸發氣流】互相計算是否在對方的氣流錐內
                 applyAerodynamics(d1, d2, dt);
                 applyAerodynamics(d2, d1, dt);
             }
@@ -561,14 +569,12 @@
         
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
-        document.getElementById('top-bar').style.display = 'flex';
+        document.getElementById('top-bar').style.display = 'block';
         
         if (mode === 'practice') {
-            document.getElementById('score-dash').style.display = 'none';
-            document.getElementById('score-blue').style.display = 'none';
+            document.getElementById('fpv-blue-row').style.display = 'none';
         } else {
-            document.getElementById('score-dash').style.display = 'inline';
-            document.getElementById('score-blue').style.display = 'inline';
+            document.getElementById('fpv-blue-row').style.display = 'flex';
         }
 
         drones.forEach(d => scene.remove(d.group));
