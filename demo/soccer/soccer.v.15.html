@@ -3,356 +3,508 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.23 (LED環狀燈效)</title>
+    <title>無人機足球 v0.24 (桌面純淨終極版)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: sans-serif; touch-action: none; overscroll-behavior: none; }
-        canvas { display: block; width: 100vw; height: 100vh; }
+        /* --- 基礎設定 --- */
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #05050a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; touch-action: none; user-select: none; }
+        canvas { display: block; width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10, 15, 10, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        .game-title { font-size: 48px; font-weight: bold; margin-bottom: 10px; color: #fff; text-shadow: 0 0 20px #44ff44; text-align: center;}
-        .game-subtitle { font-size: 16px; color: #aaa; margin-bottom: 40px; text-align: center; padding: 0 20px;}
-        .btn-mode { background: #223322; color: #fff; border: 2px solid #44ff44; padding: 15px 40px; font-size: 22px; border-radius: 10px; margin: 10px; cursor: pointer; transition: 0.3s; width: 280px; font-weight: bold;}
-        .btn-mode:hover { background: #44ff44; color: #000; box-shadow: 0 0 15px #44ff44; }
+        /* --- UI 共用圖層 --- */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; }
+        .glass-panel { background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5); }
+        .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; }
+        .btn:active { transform: scale(0.95); }
 
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; }
+        /* --- 開始畫面 --- */
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 5, 10, 0.9); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        .title { font-size: 60px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px;}
+        .title span { color: #44ff44; }
+        .subtitle { font-size: 14px; color: rgba(255,255,255,0.6); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 40px; font-weight: bold; }
+        .btn-3v3 { background: #fff; color: #000; font-size: 20px; padding: 18px 40px; border-radius: 12px; margin-bottom: 15px; width: 280px; position: relative; overflow: hidden; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
+        .btn-3v3:hover { background: #44ff44; box-shadow: 0 0 20px #44ff44; }
+        .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 18px; padding: 15px 40px; border-radius: 12px; width: 280px; }
+        .btn-practice:hover { background: rgba(255,255,255,0.1); border-color: #55ccff; color: #55ccff; }
+        .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -20px; margin-bottom: 30px; opacity: 0.8; }
+
+        /* --- 遊戲中 UI (左上角) --- */
+        #top-bar { display: none; padding: 20px; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+        #scoreboard { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px; pointer-events: auto; }
+        .score-row { display: flex; align-items: center; gap: 15px; }
+        .score-num { font-size: 32px; font-weight: 900; }
+        .score-red { color: #ff5555; text-shadow: 0 0 12px rgba(255,85,85,0.8); }
+        .score-blue { color: #5555ff; text-shadow: 0 0 12px rgba(85,85,255,0.8); }
+        .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
+        .timer-box { border-left: 1px solid rgba(255,255,255,0.2); padding-left: 15px; font-family: monospace; font-size: 20px; font-weight: bold; letter-spacing: 2px; }
+        .timer-urgent { color: #ffaa00; animation: pulse 1s infinite; }
+        #status-prompt { font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #44ff44; transition: color 0.3s; }
         
-        #scoreboard { 
-            position: absolute; 
-            top: 15px; 
-            left: 15px; 
-            background: rgba(0,0,0,0.65); 
-            padding: 8px 15px; 
-            border-radius: 8px; 
-            border: 1px solid #444; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5); 
-            pointer-events: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        /* --- 結算畫面 --- */
+        #gameover-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        .go-title { font-size: 50px; font-weight: 900; font-style: italic; text-transform: uppercase; margin-bottom: 5px; }
+        .go-subtitle { color: rgba(255,255,255,0.5); font-size: 14px; letter-spacing: 6px; margin-bottom: 40px; font-weight: bold; }
+        .final-score-box { display: flex; align-items: center; gap: 40px; margin-bottom: 50px; }
+        .fs-team { display: flex; flex-direction: column; align-items: center; }
+        .fs-num { font-size: 80px; font-weight: 900; }
+        .fs-label { font-size: 12px; font-weight: bold; letter-spacing: 2px; opacity: 0.7; margin-top: 5px; }
+        .btn-restart { background: #fff; color: #000; padding: 16px 40px; font-size: 18px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
+        .btn-restart:hover { transform: scale(1.05); }
+
+        /* --- 虛擬搖桿與提示 --- */
+        .touch-ctrl { position: absolute; width: 130px; height: 130px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.2); border-radius: 50%; pointer-events: auto; display: none; bottom: 30px; }
+        .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.2); pointer-events: none;}
+        #joy-left { left: 30px; }
+        #joy-right { right: 30px; }
+        
+        #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
+
+        /* RWD 適應手機 */
+        @media (max-width: 768px) {
+            .touch-ctrl { display: block; }
+            #pc-hint { display: none !important; }
+            .title { font-size: 40px; }
+            #top-bar { padding: 10px; }
+            #scoreboard { padding: 8px 15px; }
+            .score-num { font-size: 24px; }
+            .timer-box { font-size: 16px; padding-left: 10px; gap: 10px;}
+            .fs-num { font-size: 60px; }
+            .final-score-box { gap: 20px; }
         }
-        .score-row { display: flex; align-items: center; gap: 10px; }
-        .score-text { font-size: 24px; font-weight: bold; }
-        .red-score { color: #ff5555; text-shadow: 0 0 10px #ff4444; }
-        .blue-score { color: #5555ff; text-shadow: 0 0 10px #4444ff; }
-        #timer { font-size: 18px; color: #eee; font-family: monospace; letter-spacing: 1px; margin-left: 10px; padding-left: 15px; border-left: 1px solid #666;}
-        
-        #status-prompt { font-size: 14px; font-weight: bold; text-align: left; transition: color 0.3s; letter-spacing: 1px;}
-
-        .touch-ctrl { position: absolute; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; pointer-events: auto; display: none; }
-        .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.5); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.2);}
-        
-        #joystick-left { bottom: 30px; left: 30px; width: 120px; height: 120px; }
-        #joystick-right { bottom: 30px; right: 30px; width: 120px; height: 120px; }
-        
-        #pc-hint { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.6); text-align: center; font-size: 12px; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 5px; letter-spacing: 1px;}
-
-        @media (max-width: 768px) { 
-            .touch-ctrl { display: block; } 
-            #pc-hint { display: none; }
-            .game-title { font-size: 32px; }
-            .btn-mode { font-size: 18px; padding: 12px 20px; width: 240px; }
-            #scoreboard { top: 10px; left: 10px; padding: 6px 12px; }
-            .score-text { font-size: 20px; }
-            #timer { font-size: 16px; margin-left: 5px; padding-left: 10px;}
-        }
+        @media (min-width: 769px) { #pc-hint { display: block; } }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
+    <canvas id="game-canvas"></canvas>
+
     <div id="start-screen">
-        <div class="game-title">無人機足球模擬器</div>
-        <div class="game-subtitle">v0.23 | 20cm 級賽事 & 14 顆真實 LED 環狀燈</div>
-        <button class="btn-mode" onclick="startGame('3v3')">3v3 競賽模式</button>
-        <button class="btn-mode" onclick="startGame('practice')" style="border-color:#55ccff;">單人練習模式</button>
+        <h1 class="title">無人機<span>足球</span></h1>
+        <div class="mobile-hint">提示：手機用戶請橫向擺放以獲得最佳體驗</div>
+        <div class="subtitle">v0.24 | 20cm 標準賽事 桌面純淨版</div>
+        <button class="btn btn-3v3" onclick="startGame('3v3')">3V3 競賽模式</button>
+        <button class="btn btn-practice" onclick="startGame('practice')">單人練習模式</button>
     </div>
 
     <div id="ui-layer">
-        <div id="scoreboard">
-            <div class="score-row">
-                <span class="score-text red-score" id="score-red">0</span>
-                <span class="score-text" id="score-dash" style="color: #888;">-</span>
-                <span class="score-text blue-score" id="score-blue">0</span>
-                <span id="timer">03:00</span>
+        <div id="top-bar">
+            <div id="scoreboard" class="glass-panel">
+                <div class="score-row">
+                    <span class="score-num score-red" id="score-red">0</span>
+                    <span class="score-dash" id="score-dash">-</span>
+                    <span class="score-num score-blue" id="score-blue">0</span>
+                    <span class="timer-box" id="timer">03:00</span>
+                </div>
+                <div id="status-prompt">🟢 可以進攻</div>
             </div>
-            <div id="status-prompt" style="color: #44ff44;">可以進攻</div>
         </div>
-        
-        <div id="joystick-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
-        <div id="joystick-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
 
-        <div id="pc-hint">【美國手 Mode 2】 左手WASD：升降與左右轉向 | 右手↑↓←→：前後推飛與左右平移</div>
+        <div id="joy-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
+        <div id="joy-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
+        <div id="pc-hint" class="glass-panel">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移</div>
+    </div>
+
+    <div id="gameover-screen">
+        <div class="go-title text-yellow">比賽結束</div>
+        <div class="go-subtitle">FINAL SCORE</div>
+        <div class="final-score-box">
+            <div class="fs-team">
+                <div class="fs-num score-red" id="final-red">0</div>
+                <div class="fs-label" style="color: #ff5555;">紅隊</div>
+            </div>
+            <div class="score-dash" id="final-dash">VS</div>
+            <div class="fs-team" id="final-blue-container">
+                <div class="fs-num score-blue" id="final-blue">0</div>
+                <div class="fs-label" style="color: #5555ff;">藍隊</div>
+            </div>
+        </div>
+        <button class="btn btn-restart" onclick="returnToMenu()">返回主選單</button>
     </div>
 
 <script>
-    const pitch = { w: 800, h: 300, d: 400 }; 
-    const droneRadius = 10; 
-    const goalInnerRadius = 20; 
-    const goalTubeRadius = 3; 
-    const torusRadius = goalInnerRadius + goalTubeRadius; 
-    const goalY = 150; 
-    const goalX = pitch.w / 2 - 100; 
+    // --- 音效系統 (使用原生 Audio API，避免外部套件錯誤) ---
+    const sfxScore = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3');
+    const sfxHit = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-metal-hit-clank-2144.mp3');
+    sfxScore.volume = 0.5;
+    sfxHit.volume = 0.4;
 
-    const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x111115, 600, 2500);
-
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 3000);
-    camera.position.set(-pitch.w/2 - 200, pitch.h/2 + 150, 0); 
-    camera.lookAt(0, pitch.h/2 - 50, 0); 
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x111115); 
-    document.body.appendChild(renderer.domElement);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-    scene.add(ambientLight);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
-    dirLight.position.set(0, pitch.h + 200, 100);
-    scene.add(dirLight);
-
-    const floorGeo = new THREE.PlaneGeometry(pitch.w, pitch.d);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a2a1a, roughness: 0.9 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    scene.add(floor);
-
-    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 3 });
-    const borderGeo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(-pitch.w/2, 2, -pitch.d/2), new THREE.Vector3(pitch.w/2, 2, -pitch.d/2),
-        new THREE.Vector3(pitch.w/2, 2, pitch.d/2), new THREE.Vector3(-pitch.w/2, 2, pitch.d/2),
-        new THREE.Vector3(-pitch.w/2, 2, -pitch.d/2)
-    ]);
-    scene.add(new THREE.Line(borderGeo, lineMat));
-
-    const centerLineGeo = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 2, -pitch.d/2), new THREE.Vector3(0, 2, pitch.d/2)
-    ]);
-    scene.add(new THREE.Line(centerLineGeo, lineMat));
-
-    const circleGeo = new THREE.RingGeometry(95, 100, 64);
-    const circleMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-    const centerCircle = new THREE.Mesh(circleGeo, circleMat);
-    centerCircle.rotation.x = -Math.PI / 2;
-    centerCircle.position.y = 2;
-    scene.add(centerCircle);
-
-    const netGeo = new THREE.BoxGeometry(pitch.w, pitch.h, pitch.d);
-    const netMat = new THREE.MeshBasicMaterial({ color: 0x445544, wireframe: true, transparent: true, opacity: 0.15 });
-    const netMesh = new THREE.Mesh(netGeo, netMat);
-    netMesh.position.y = pitch.h / 2;
-    scene.add(netMesh);
-
-    const goalPosRed = new THREE.Vector3(-goalX, goalY, 0);
-    const goalPosBlue = new THREE.Vector3(goalX, goalY, 0);
-
-    function createGoal(position, colorHex) {
-        const geo = new THREE.TorusGeometry(torusRadius, goalTubeRadius, 16, 100);
-        const mat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 1.0 });
-        const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.copy(position);
-        mesh.rotation.y = Math.PI / 2;
-        scene.add(mesh);
-        
-        const defCircle = new THREE.Mesh(new THREE.RingGeometry(torusRadius*1.5-3, torusRadius*1.5, 32), circleMat);
-        defCircle.rotation.x = -Math.PI / 2;
-        defCircle.position.set(position.x, 2, position.z);
-        scene.add(defCircle);
-
-        return mesh;
+    function playSound(audioObj) {
+        // 防止瀏覽器嚴格政策報錯
+        if(audioObj.readyState >= 2) {
+            audioObj.currentTime = 0;
+            audioObj.play().catch(e => {});
+        }
     }
-    createGoal(goalPosRed, 0xff5555);
-    createGoal(goalPosBlue, 0x5555ff);
 
-    const droneGeoCage = new THREE.IcosahedronGeometry(droneRadius, 2);
-    const droneGeoCore = new THREE.SphereGeometry(4, 16, 16);
+    // --- 遊戲常數設定 (FAI F9A-B 20cm 級) ---
+    const PITCH = { w: 800, h: 300, d: 400 }; 
+    const DRONE_RADIUS = 10; 
+    const GOAL_INNER_RADIUS = 20; 
+    const GOAL_TUBE_RADIUS = 3; 
+    const TORUS_RADIUS = GOAL_INNER_RADIUS + GOAL_TUBE_RADIUS; 
+    const GOAL_Y = 150; 
+    const GOAL_X = PITCH.w / 2 - 100; 
 
+    // --- 全域變數 ---
+    const canvas = document.getElementById('game-canvas');
+    let scene, camera, renderer, clock;
+    let drones = [];
+    let player = null;
+    let gameMode = '3v3';
+    let gameState = 'menu'; // menu, playing, gameover
+    let timeLeft = 180;
+    let score = { red: 0, blue: 0 };
+    let animationFrameId;
+    let gameTimerId;
+
+    // 輸入狀態
+    const keys = { w:false, a:false, s:false, d:false, arrowup:false, arrowdown:false, arrowleft:false, arrowright:false };
+    const joyLeft = { x: 0, y: 0 };
+    const joyRight = { x: 0, y: 0 };
+
+    // --- 實體類別：無人機 ---
     class Drone {
-        constructor(x, y, z, color, role, team) {
+        constructor(x, y, z, colorHex, role, team) {
             this.p = new THREE.Vector3(x, y, z);
-            this.prevP = new THREE.Vector3(x, y, z); 
+            this.prevP = new THREE.Vector3(x, y, z);
             this.v = new THREE.Vector3(0, 0, 0);
-            this.yaw = team === 'red' ? -Math.PI/2 : Math.PI/2; 
-            this.radius = droneRadius;
+            this.yaw = team === 'red' ? -Math.PI / 2 : Math.PI / 2;
+            this.radius = DRONE_RADIUS;
             this.mass = 1.0;
-            this.color = color;
-            this.role = role;
             this.team = team;
-            this.speed = 1200; 
-            this.yawSpeed = 3.5; 
-            this.friction = 0.94; 
+            this.role = role;
+            this.speed = 1200;
+            this.yawSpeed = 3.5;
+            this.friction = 0.94;
             this.needsReset = false;
-            
-            this.stunTimer = 0; 
-            this.angularVelocity = new THREE.Vector3(0, 0, 0);
+            this.stunTimer = 0;
+            this.angularVelocity = new THREE.Vector3();
 
             this.group = new THREE.Group();
-            
-            // 外層防護罩
-            const cageMat = new THREE.MeshBasicMaterial({ color: 0x888888, wireframe: true, transparent: true, opacity: 0.7 });
-            this.cageMesh = new THREE.Mesh(droneGeoCage, cageMat);
+            this.group.position.copy(this.p);
+            this.group.rotation.y = this.yaw;
+
+            // 防護罩
+            const cageMat = new THREE.MeshStandardMaterial({ 
+                color: 0xcccccc, wireframe: true, transparent: true, opacity: 0.8,
+                emissive: team === 'red' ? 0xaa0000 : 0x0000aa, emissiveIntensity: 0.5
+            });
+            this.cageMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(this.radius, 2), cageMat);
             this.group.add(this.cageMesh);
 
-            // 內層核心
-            const coreMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.4 });
-            this.coreMesh = new THREE.Mesh(droneGeoCore, coreMat);
+            // 核心
+            const coreMat = new THREE.MeshStandardMaterial({ 
+                color: colorHex, emissive: colorHex, emissiveIntensity: 1.0, metalness: 0.8, roughness: 0.2
+            });
+            this.coreMesh = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 16), coreMat);
             this.group.add(this.coreMesh);
+
+            // 14顆 LED 環狀陣列
+            const numLEDs = 14;
+            const ringRadius = this.radius + 0.5;
+            for (let i = 0; i < numLEDs; i++) {
+                const theta = i * (Math.PI * 2 / numLEDs);
+                const lx = Math.sin(theta) * ringRadius;
+                const lz = -Math.cos(theta) * ringRadius;
+                const isBackLED = i >= 5 && i <= 9;
+                const ledColor = team === "red" ? (isBackLED ? 0x5555ff : 0xff5555) : (isBackLED ? 0xff5555 : 0x5555ff);
+                const ledMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), new THREE.MeshBasicMaterial({ color: ledColor }));
+                ledMesh.position.set(lx, 0, lz);
+                this.group.add(ledMesh);
+            }
 
             // 攻擊手頂部標示燈
             if (role === 'striker') {
-                const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-                this.indicator = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), lightMat);
+                this.indicator = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
                 this.indicator.position.y = 13;
                 this.group.add(this.indicator);
-            }
-
-            // 【新增】14 顆環狀 LED 燈陣列
-            const numLEDs = 14;
-            const ringRadius = this.radius + 0.5; // 稍微突出於機架
-            
-            const colorRed = 0xff5555;
-            const colorBlue = 0x5555ff;
-
-            for (let i = 0; i < numLEDs; i++) {
-                // 將圓分成 14 等分，計算 X 與 Z 座標
-                const theta = i * (Math.PI * 2 / numLEDs);
-                const lx = Math.sin(theta) * ringRadius;
-                const lz = -Math.cos(theta) * ringRadius; 
-                
-                // 在 Three.js 的局部座標系中，-Z 為正前方，+Z 為正後方
-                // i = 5, 6, 7, 8, 9 是靠近 +Z 的 5 顆燈 (尾燈區間)
-                const isBackLED = (i >= 5 && i <= 9);
-
-                let ledColorHex;
-                if (this.team === 'red') {
-                    // 紅隊：後面 5 顆是藍色，其他 9 顆是紅色
-                    ledColorHex = isBackLED ? colorBlue : colorRed;
-                } else {
-                    // 藍隊：後面 5 顆是紅色，其他 9 顆是藍色
-                    ledColorHex = isBackLED ? colorRed : colorBlue;
-                }
-
-                const ledMat = new THREE.MeshBasicMaterial({ color: ledColorHex });
-                const ledMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), ledMat);
-                ledMesh.position.set(lx, 0, lz);
-                this.group.add(ledMesh); // 將燈加入至旋轉主體 (不隨防護罩自轉)
             }
 
             scene.add(this.group);
         }
 
         update(dt) {
-            this.prevP.copy(this.p); 
-            
+            this.prevP.copy(this.p);
             if (this.stunTimer > 0) this.stunTimer -= dt;
 
             this.v.multiplyScalar(this.friction);
             this.p.addScaledVector(this.v, dt);
 
-            if (this.p.x - this.radius < -pitch.w/2) { this.p.x = -pitch.w/2 + this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
-            if (this.p.x + this.radius > pitch.w/2) { this.p.x = pitch.w/2 - this.radius; this.v.x *= -0.7; this.stunTimer=0.1;}
-            if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.7; this.stunTimer=0.1;} 
-            if (this.p.y + this.radius > pitch.h) { this.p.y = pitch.h - this.radius; this.v.y *= -0.7; this.stunTimer=0.1;} 
-            if (this.p.z - this.radius < -pitch.d/2) { this.p.z = -pitch.d/2 + this.radius; this.v.z *= -0.7; this.stunTimer=0.1;}
-            if (this.p.z + this.radius > pitch.d/2) { this.p.z = pitch.d/2 - this.radius; this.v.z *= -0.7; this.stunTimer=0.1;}
+            // 邊界碰撞與硬直
+            if (this.p.x - this.radius < -PITCH.w / 2) { this.p.x = -PITCH.w / 2 + this.radius; this.v.x *= -0.7; this.stunTimer = 0.1; }
+            if (this.p.x + this.radius > PITCH.w / 2) { this.p.x = PITCH.w / 2 - this.radius; this.v.x *= -0.7; this.stunTimer = 0.1; }
+            if (this.p.y - this.radius < 0) { this.p.y = this.radius; this.v.y *= -0.7; this.stunTimer = 0.1; }
+            if (this.p.y + this.radius > PITCH.h) { this.p.y = PITCH.h - this.radius; this.v.y *= -0.7; this.stunTimer = 0.1; }
+            if (this.p.z - this.radius < -PITCH.d / 2) { this.p.z = -PITCH.d / 2 + this.radius; this.v.z *= -0.7; this.stunTimer = 0.1; }
+            if (this.p.z + this.radius > PITCH.d / 2) { this.p.z = PITCH.d / 2 - this.radius; this.v.z *= -0.7; this.stunTimer = 0.1; }
 
             this.group.position.copy(this.p);
             this.group.rotation.y = this.yaw;
-            
-            if(this.v.length() > 5 && this.angularVelocity.lengthSq() < 1) {
+
+            // 視覺自轉特效
+            if (this.v.length() > 5 && this.angularVelocity.lengthSq() < 1) {
                 const axis = new THREE.Vector3(this.v.z, 0, -this.v.x).normalize();
                 this.cageMesh.rotateOnWorldAxis(axis, this.v.length() * dt * 0.04);
             }
-            
             if (this.angularVelocity.lengthSq() > 0.01) {
                 this.cageMesh.rotation.x += this.angularVelocity.x * dt;
                 this.cageMesh.rotation.y += this.angularVelocity.y * dt;
                 this.cageMesh.rotation.z += this.angularVelocity.z * dt;
-                this.angularVelocity.multiplyScalar(0.9); 
+                this.angularVelocity.multiplyScalar(0.9);
             }
 
-            if (this.role === 'striker') {
+            // 更新燈號
+            if (this.indicator) {
                 this.indicator.material.color.setHex(this.needsReset ? 0x444444 : 0xffffff);
             }
         }
     }
 
-    let gameState = 'menu'; 
-    let gameMode = '3v3';
-    let drones = [];
-    let player = null;
-    let gameTime = 180;
-    let scoreRed = 0, scoreBlue = 0;
-    const clock = new THREE.Clock();
+    // --- 初始化 Three.js 環境 ---
+    function initThreeJS() {
+        scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x05050a, 600, 2500);
 
-    const keys = { w:false, a:false, s:false, d:false, arrowup:false, arrowdown:false, arrowleft:false, arrowright:false };
-    let joyLeft = { x: 0, y: 0 }; 
-    let joyRight = { x: 0, y: 0 };
+        camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 3000);
+        camera.position.set(-PITCH.w / 2 - 200, PITCH.h / 2 + 150, 0);
+        camera.lookAt(0, PITCH.h / 2 - 50, 0);
 
-    window.addEventListener('keydown', e => { 
-        const k = e.key.toLowerCase();
-        if(keys.hasOwnProperty(k)) keys[k] = true; 
-    });
-    window.addEventListener('keyup', e => { 
-        const k = e.key.toLowerCase();
-        if(keys.hasOwnProperty(k)) keys[k] = false; 
-    });
+        renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000, 0); // 讓背景透明以露出 CSS 背景
 
-    function setupJoystick(zoneId, knobId, outVector) {
-        const zone = document.getElementById(zoneId);
-        const knob = document.getElementById(knobId);
-        let touchId = null;
+        // 燈光
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const pointLight = new THREE.PointLight(0xffffff, 1.5, 1500);
+        pointLight.position.set(0, PITCH.h + 100, 0);
+        scene.add(pointLight);
 
-        zone.addEventListener('touchstart', e => { e.preventDefault(); touchId = e.changedTouches[0].identifier; updateJoy(e.changedTouches[0]); }, {passive: false});
-        zone.addEventListener('touchmove', e => { e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) updateJoy(t); }, {passive: false});
+        // 地板與線條
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(PITCH.w, PITCH.d), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 }));
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
 
-        const reset = () => { touchId = null; knob.style.transform = `translate(-50%, -50%)`; outVector.x = 0; outVector.y = 0; };
-        zone.addEventListener('touchend', reset);
-        zone.addEventListener('touchcancel', reset);
+        const grid = new THREE.GridHelper(1000, 20, 0x44ff44, 0x222222);
+        grid.position.y = 0.1;
+        scene.add(grid);
 
-        function updateJoy(touch) {
-            const rect = zone.getBoundingClientRect();
-            let dx = touch.clientX - (rect.left + rect.width/2);
-            let dy = touch.clientY - (rect.top + rect.height/2);
-            let maxDist = rect.width/2;
-            let dist = Math.sqrt(dx*dx + dy*dy);
-            if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
-            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-            outVector.x = dx / maxDist;
-            outVector.y = -dy / maxDist; 
+        const netMesh = new THREE.Mesh(new THREE.BoxGeometry(PITCH.w, PITCH.h, PITCH.d), new THREE.MeshBasicMaterial({ color: 0x445544, wireframe: true, transparent: true, opacity: 0.15 }));
+        netMesh.position.y = PITCH.h / 2;
+        scene.add(netMesh);
+
+        // 球門輔助函數
+        const createGoal = (pos, colorHex) => {
+            const mesh = new THREE.Mesh(new THREE.TorusGeometry(TORUS_RADIUS, GOAL_TUBE_RADIUS, 16, 100), new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 2.0 }));
+            mesh.position.copy(pos);
+            mesh.rotation.y = Math.PI / 2;
+            scene.add(mesh);
+            const light = new THREE.PointLight(colorHex, 2, 150);
+            light.position.copy(pos);
+            scene.add(light);
+        };
+        createGoal(new THREE.Vector3(-GOAL_X, GOAL_Y, 0), 0xff3333);
+        createGoal(new THREE.Vector3(GOAL_X, GOAL_Y, 0), 0x3333ff);
+
+        clock = new THREE.Clock();
+    }
+
+    // --- 遊戲邏輯與 UI 更新 ---
+    function updateUI() {
+        document.getElementById('score-red').innerText = score.red;
+        document.getElementById('score-blue').innerText = score.blue;
+        
+        let m = Math.floor(timeLeft / 60);
+        let s = Math.floor(timeLeft % 60);
+        const timerEl = document.getElementById('timer');
+        timerEl.innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+        
+        if (timeLeft <= 30 && timeLeft > 0) timerEl.classList.add('timer-urgent');
+        else timerEl.classList.remove('timer-urgent');
+
+        const promptEl = document.getElementById('status-prompt');
+        if (player && player.needsReset) {
+            promptEl.innerText = "⚠️ 已得分，請回中場重置";
+            promptEl.style.color = "#ffaa00";
+        } else {
+            promptEl.innerText = "🟢 可以進攻";
+            promptEl.style.color = "#44ff44";
         }
     }
-    setupJoystick('joystick-left', 'knob-left', joyLeft);
-    setupJoystick('joystick-right', 'knob-right', joyRight);
 
     function requestFullScreen() {
-        let el = document.documentElement;
-        if (el.requestFullscreen) {
-            el.requestFullscreen().catch(err => console.log(err));
-        } else if (el.webkitRequestFullscreen) {
-            el.webkitRequestFullscreen().catch(err => console.log(err));
-        } else if (el.msRequestFullscreen) { 
-            el.msRequestFullscreen().catch(err => console.log(err));
+        const el = document.documentElement;
+        if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen().catch(()=>{});
+    }
+
+    // --- 實體物理碰撞核心 ---
+    function resolveCollision(d1, d2) {
+        const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
+        const dist = diff.length();
+        const minDist = d1.radius + d2.radius;
+        if (dist < minDist && dist > 0) {
+            let normal = diff.clone().normalize();
+            // 隨機偏斜防死鎖
+            normal.x += (Math.random() - 0.5) * 0.4; normal.y += (Math.random() - 0.5) * 0.4; normal.z += (Math.random() - 0.5) * 0.4;
+            normal.normalize();
+
+            const totalMass = d1.mass + d2.mass;
+            d1.p.addScaledVector(normal, -(minDist - dist) * (d2.mass / totalMass));
+            d2.p.addScaledVector(normal, (minDist - dist) * (d1.mass / totalMass));
+            
+            const speed = new THREE.Vector3().subVectors(d1.v, d2.v).dot(normal);
+            const impulse = (1 + 0.8) * Math.max(speed, 350) / (1/d1.mass + 1/d2.mass);
+            
+            d1.v.addScaledVector(normal, -impulse / d1.mass);
+            d2.v.addScaledVector(normal, impulse / d2.mass);
+            d1.stunTimer = 0.25; d2.stunTimer = 0.25;
+            
+            d1.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(15);
+            d2.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(15);
+            
+            playSound(sfxHit);
         }
     }
 
+    function resolveGoalCollision(drone, gX, gY, gZ) {
+        const dx = drone.p.x - gX; const dy = drone.p.y - gY; const dz = drone.p.z - gZ;
+        const distYZ = Math.hypot(dy, dz);
+        const closestY = distYZ > 0 ? (dy / distYZ) * TORUS_RADIUS : TORUS_RADIUS;
+        const closestZ = distYZ > 0 ? (dz / distYZ) * TORUS_RADIUS : 0;
+        const distToRing = Math.hypot(dx, dy - closestY, dz - closestZ);
+        
+        if (distToRing < drone.radius + GOAL_TUBE_RADIUS && distToRing > 0) {
+            const nx = dx / distToRing; const ny = (dy - closestY) / distToRing; const nz = (dz - closestZ) / distToRing;
+            drone.p.x += nx * ((drone.radius + GOAL_TUBE_RADIUS) - distToRing);
+            drone.p.y += ny * ((drone.radius + GOAL_TUBE_RADIUS) - distToRing);
+            drone.p.z += nz * ((drone.radius + GOAL_TUBE_RADIUS) - distToRing);
+
+            let normal = new THREE.Vector3(nx, ny, nz);
+            normal.x += (Math.random() - 0.5) * 0.2; normal.normalize();
+
+            drone.v.addScaledVector(normal, (1 + 0.6) * Math.max(-drone.v.dot(normal), 400));
+            drone.stunTimer = 0.2;
+            drone.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(20);
+            playSound(sfxHit);
+        }
+    }
+
+    // --- 主渲染迴圈 ---
+    function animate() {
+        if (gameState !== 'playing') {
+            clock.getDelta(); // 清除時間累積
+            renderer.render(scene, camera);
+            animationFrameId = requestAnimationFrame(animate);
+            return;
+        }
+
+        const dt = Math.min(clock.getDelta(), 0.1);
+
+        // --- 玩家輸入 (美國手) ---
+        if (player && player.stunTimer <= 0) {
+            let yawInput = (keys["a"] ? 1 : 0) + (keys["d"] ? -1 : 0) - joyLeft.x;
+            player.yaw += yawInput * player.yawSpeed * dt;
+            let throttleInput = (keys["w"] ? 1 : 0) + (keys["s"] ? -1 : 0) + joyLeft.y;
+            player.v.y += throttleInput * player.speed * dt;
+            
+            let pitchInput = (keys["arrowup"] ? 1 : 0) + (keys["arrowdown"] ? -1 : 0) + joyRight.y;
+            let rollInput = (keys["arrowleft"] ? -1 : 0) + (keys["arrowright"] ? 1 : 0) + joyRight.x;
+
+            player.v.addScaledVector(new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize(), pitchInput * player.speed * dt);
+            player.v.addScaledVector(new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize(), rollInput * player.speed * dt);
+        }
+
+        const timeNow = performance.now();
+        const goalPosRed = new THREE.Vector3(-GOAL_X, GOAL_Y, 0);
+        const goalPosBlue = new THREE.Vector3(GOAL_X, GOAL_Y, 0);
+
+        // --- 智能 AI ---
+        drones.forEach(d => {
+            if (d === player || d.stunTimer > 0) return;
+            if (d.role === "defender") {
+                const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === "striker");
+                if (enemyStriker) {
+                    let target = new THREE.Vector3().copy(d.team === "red" ? goalPosRed : goalPosBlue).lerp(enemyStriker.p, 0.4);
+                    target.z += Math.sin(timeNow * 0.003 + d.p.x) * 25; 
+                    target.y += Math.cos(timeNow * 0.004 + d.p.y) * 25;
+                    const dir = new THREE.Vector3().subVectors(target, d.p);
+                    if (dir.length() > 10) {
+                        d.v.addScaledVector(dir.normalize(), d.speed * dt * ((enemyStriker.p.distanceTo(d.team === "red" ? goalPosRed : goalPosBlue) < 150) ? 0.8 : 0.55));
+                        d.yaw = Math.atan2(-dir.x, -dir.z);
+                    }
+                }
+            } else if (d.role === "striker") {
+                let target = new THREE.Vector3();
+                if (d.needsReset) target.set(d.team === "red" ? -200 : 200, GOAL_Y, 0);
+                else target.copy(d.team === "red" ? goalPosBlue : goalPosRed);
+                
+                let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
+                let speedMult = 0.55;
+                
+                if (!d.needsReset) {
+                    let closestDef = null, minDefDist = Infinity;
+                    drones.forEach(other => { if (other.team !== d.team && other.role === 'defender' && d.p.distanceTo(other.p) < minDefDist) { minDefDist = d.p.distanceTo(other.p); closestDef = other; }});
+                    if (closestDef && minDefDist < 150 && dir.dot(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize()) > 0.5) {
+                        if (d.p.distanceTo(target) < 200) {
+                            speedMult = 1.0; 
+                            if (d.v.length() < 300) { 
+                                let slipDir = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize(), new THREE.Vector3(0,1,0)).normalize();
+                                if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
+                                dir.addScaledVector(slipDir, 1.5); dir.y += Math.cos(timeNow * 0.006) * 1.5; dir.normalize();
+                            }
+                        } else {
+                            let lateralVec = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(closestDef.p, d.p).normalize(), new THREE.Vector3(0,1,0)).normalize();
+                            if (new THREE.Vector3().subVectors(d.p, closestDef.p).dot(lateralVec) < 0) lateralVec.negate();
+                            dir.addScaledVector(lateralVec, 1.2).normalize();
+                            dir.y += d.p.y < closestDef.p.y ? -0.5 : 0.5; dir.normalize();
+                        }
+                    }
+                }
+                d.v.addScaledVector(dir, d.speed * dt * speedMult); 
+                d.yaw = Math.atan2(-dir.x, -dir.z);
+            }
+        });
+
+        // --- 物理結算 ---
+        for (let i = 0; i < drones.length; i++) {
+            const d1 = drones[i];
+            d1.update(dt);
+            for (let j = i + 1; j < drones.length; j++) resolveCollision(d1, drones[j]);
+
+            resolveGoalCollision(d1, -GOAL_X, GOAL_Y, 0);
+            resolveGoalCollision(d1, GOAL_X, GOAL_Y, 0);
+
+            // 穿越得分與重置判定
+            if (d1.role === "striker" && !d1.needsReset) {
+                const tX = d1.team === "red" ? GOAL_X : -GOAL_X;
+                const crossed = d1.team === "red" ? (d1.prevP.x <= tX && d1.p.x > tX) : (d1.prevP.x >= tX && d1.p.x < tX);
+                if (crossed && Math.hypot(d1.p.y - GOAL_Y, d1.p.z - 0) < GOAL_INNER_RADIUS) {
+                    d1.needsReset = true;
+                    playSound(sfxScore);
+                    if (d1.team === "red") score.red++; else score.blue++;
+                }
+            }
+            if (d1.role === "striker" && d1.needsReset && ((d1.team === "red" && d1.p.x < 0) || (d1.team === "blue" && d1.p.x > 0))) d1.needsReset = false;
+        }
+
+        updateUI();
+        renderer.render(scene, camera);
+        animationFrameId = requestAnimationFrame(animate);
+    }
+
+    // --- 遊戲流程控制 ---
     function startGame(mode) {
         requestFullScreen();
-
         gameMode = mode;
         gameState = 'playing';
-        gameTime = 180;
-        scoreRed = 0;
-        scoreBlue = 0;
-        document.getElementById('score-red').innerText = '0';
-        document.getElementById('score-blue').innerText = '0';
+        score = { red: 0, blue: 0 };
+        timeLeft = 180;
         
         document.getElementById('start-screen').style.display = 'none';
-        document.getElementById('ui-layer').style.display = 'block';
-
+        document.getElementById('gameover-screen').style.display = 'none';
+        document.getElementById('top-bar').style.display = 'flex';
+        
         if (mode === 'practice') {
             document.getElementById('score-dash').style.display = 'none';
             document.getElementById('score-blue').style.display = 'none';
@@ -361,294 +513,76 @@
             document.getElementById('score-blue').style.display = 'inline';
         }
 
+        // 清除場上物件
         drones.forEach(d => scene.remove(d.group));
         drones = [];
 
-        drones.push(new Drone(-goalX - 50, 30, 0, 0xff5555, 'striker', 'red')); 
+        // 生成無人機
+        player = new Drone(-GOAL_X - 50, 30, 0, 0xff5555, 'striker', 'red');
+        drones.push(player);
         
         if (mode === '3v3') {
-            drones.push(new Drone(-goalX - 50, 30, 80, 0xff5555, 'defender', 'red'));
-            drones.push(new Drone(-goalX - 50, 30, -80, 0xff5555, 'defender', 'red'));
-            drones.push(new Drone(goalX + 50, 30, 0, 0x5555ff, 'striker', 'blue'));
-            drones.push(new Drone(goalX + 50, 30, 80, 0x5555ff, 'defender', 'blue'));
-            drones.push(new Drone(goalX + 50, 30, -80, 0x5555ff, 'defender', 'blue'));
+            drones.push(new Drone(-GOAL_X - 50, 30, 80, 0xff5555, 'defender', 'red'));
+            drones.push(new Drone(-GOAL_X - 50, 30, -80, 0xff5555, 'defender', 'red'));
+            drones.push(new Drone(GOAL_X + 50, 30, 0, 0x5555ff, 'striker', 'blue'));
+            drones.push(new Drone(GOAL_X + 50, 30, 80, 0x5555ff, 'defender', 'blue'));
+            drones.push(new Drone(GOAL_X + 50, 30, -80, 0x5555ff, 'defender', 'blue'));
         }
+
+        // 啟動計時器
+        clearInterval(gameTimerId);
+        gameTimerId = setInterval(() => {
+            timeLeft--;
+            if(timeLeft <= 0) gameOver();
+        }, 1000);
         
-        player = drones[0];
-        clock.start(); 
+        clock.start();
     }
 
-    function resolveCollision(d1, d2) {
-        const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
-        const dist = diff.length();
-        const minDist = d1.radius + d2.radius;
-
-        if (dist < minDist && dist > 0) {
-            const overlap = minDist - dist;
-            let normal = diff.clone().normalize();
-            
-            normal.x += (Math.random() - 0.5) * 0.4;
-            normal.y += (Math.random() - 0.5) * 0.4;
-            normal.z += (Math.random() - 0.5) * 0.4;
-            normal.normalize();
-
-            const totalMass = d1.mass + d2.mass;
-            d1.p.addScaledVector(normal, -overlap * (d2.mass / totalMass));
-            d2.p.addScaledVector(normal, overlap * (d1.mass / totalMass));
-
-            const relVel = new THREE.Vector3().subVectors(d1.v, d2.v);
-            const speed = relVel.dot(normal);
-
-            let impactSpeed = Math.max(speed, 350); 
-            const e = 0.8; 
-            const impulse = (1 + e) * impactSpeed / (1/d1.mass + 1/d2.mass);
-            
-            d1.v.addScaledVector(normal, -impulse / d1.mass);
-            d2.v.addScaledVector(normal, impulse / d2.mass);
-
-            d1.stunTimer = 0.25;
-            d2.stunTimer = 0.25;
-
-            const spin = 15;
-            d1.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
-            d2.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(spin);
-        }
-    }
-
-    function resolveGoalCollision(drone, goalCenter, torusR, tubeR) {
-        const dx = drone.p.x - goalCenter.x;
-        const dy = drone.p.y - goalCenter.y;
-        const dz = drone.p.z - goalCenter.z;
-
-        const distYZ = Math.hypot(dy, dz);
-        let closestY = 0, closestZ = 0;
-        if (distYZ > 0) {
-            closestY = (dy / distYZ) * torusR;
-            closestZ = (dz / distYZ) * torusR;
-        } else {
-            closestY = torusR; closestZ = 0;
-        }
-
-        const diffX = dx;
-        const diffY = dy - closestY;
-        const diffZ = dz - closestZ;
-        const distToRing = Math.hypot(diffX, diffY, diffZ);
-        const minDist = drone.radius + tubeR; 
-
-        if (distToRing < minDist && distToRing > 0) {
-            let nx = diffX / distToRing;
-            let ny = diffY / distToRing;
-            let nz = diffZ / distToRing;
-
-            const overlap = minDist - distToRing;
-            drone.p.x += nx * overlap;
-            drone.p.y += ny * overlap;
-            drone.p.z += nz * overlap;
-
-            let normal = new THREE.Vector3(nx, ny, nz);
-            
-            normal.x += (Math.random() - 0.5) * 0.2;
-            normal.normalize();
-
-            const speed = drone.v.dot(normal);
-            let impactSpeed = Math.max(-speed, 400); 
-            
-            const e = 0.6; 
-            drone.v.addScaledVector(normal, (1 + e) * impactSpeed);
-            
-            drone.stunTimer = 0.2;
-            drone.angularVelocity.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(20);
-        }
-    }
-
-    function updateStatusPrompt() {
-        const promptEl = document.getElementById('status-prompt');
-        if (player.needsReset) {
-            promptEl.innerText = "已得分請回中場";
-            promptEl.style.color = "#ffaa00"; 
-        } else {
-            promptEl.innerText = "可以進攻";
-            promptEl.style.color = "#44ff44"; 
-        }
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
+    function gameOver() {
+        gameState = 'gameover';
+        clearInterval(gameTimerId);
+        document.getElementById('top-bar').style.display = 'none';
+        document.getElementById('gameover-screen').style.display = 'flex';
+        document.getElementById('final-red').innerText = score.red;
+        document.getElementById('final-blue').innerText = score.blue;
         
-        if (gameState !== 'playing') {
-            clock.getDelta(); 
-            renderer.render(scene, camera);
-            return;
+        if (gameMode === 'practice') {
+            document.getElementById('final-dash').style.display = 'none';
+            document.getElementById('final-blue-container').style.display = 'none';
+        } else {
+            document.getElementById('final-dash').style.display = 'block';
+            document.getElementById('final-blue-container').style.display = 'flex';
         }
-
-        const dt = Math.min(clock.getDelta(), 0.1);
-
-        if(gameTime > 0) {
-            gameTime -= dt;
-            let m = Math.floor(gameTime / 60);
-            let s = Math.floor(gameTime % 60);
-            document.getElementById('timer').innerText = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-        }
-
-        if (player.stunTimer <= 0) {
-            let yawInput = 0;
-            if(keys.a) yawInput += 1;
-            if(keys.d) yawInput -= 1;
-            yawInput -= joyLeft.x;
-            player.yaw += yawInput * player.yawSpeed * dt;
-
-            let throttleInput = 0;
-            if(keys.w) throttleInput += 1;
-            if(keys.s) throttleInput -= 1;
-            throttleInput += joyLeft.y;
-            player.v.y += throttleInput * player.speed * dt;
-
-            const forwardVec = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw)).normalize();
-            const rightVec = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize();
-
-            let pitchInput = 0; 
-            if(keys.arrowup) pitchInput += 1;
-            if(keys.arrowdown) pitchInput -= 1;
-            pitchInput += joyRight.y;
-            
-            let rollInput = 0; 
-            if(keys.arrowleft) rollInput -= 1;
-            if(keys.arrowright) rollInput += 1;
-            rollInput += joyRight.x;
-
-            player.v.addScaledVector(forwardVec, pitchInput * player.speed * dt);
-            player.v.addScaledVector(rightVec, rollInput * player.speed * dt);
-        }
-
-        const timeNow = performance.now();
-
-        drones.forEach(d => {
-            if(d === player) return;
-            if (d.stunTimer > 0) return; 
-
-            if (d.role === 'defender') {
-                const myGoal = d.team === 'red' ? goalPosRed : goalPosBlue;
-                const enemyStriker = drones.find(ed => ed.team !== d.team && ed.role === 'striker');
-                if(!enemyStriker) return; 
-
-                let target = new THREE.Vector3().copy(myGoal).lerp(enemyStriker.p, 0.4); 
-                
-                const sweepRange = 25; 
-                target.z += Math.sin(timeNow * 0.003 + d.p.x) * sweepRange;
-                target.y += Math.cos(timeNow * 0.004 + d.p.y) * sweepRange;
-
-                const dir = new THREE.Vector3().subVectors(target, d.p);
-                if(dir.length() > 10) { 
-                    dir.normalize();
-                    let defSpeedMult = (enemyStriker.p.distanceTo(myGoal) < 150) ? 0.8 : 0.55;
-                    d.v.addScaledVector(dir, d.speed * dt * defSpeedMult); 
-                    d.yaw = Math.atan2(-dir.x, -dir.z); 
-                }
-            } 
-            else if (d.role === 'striker') {
-                let target = new THREE.Vector3();
-                if(d.needsReset) {
-                    target.set(d.team==='red'? -200:200, goalY, 0); 
-                } else {
-                    target.copy(d.team==='red'? goalPosBlue : goalPosRed); 
-                }
-
-                let dir = new THREE.Vector3().subVectors(target, d.p).normalize();
-                let speedMult = 0.55; 
-                
-                if (!d.needsReset) {
-                    let closestDef = null;
-                    let minDefDist = Infinity;
-                    drones.forEach(other => {
-                        if (other.team !== d.team && other.role === 'defender') {
-                            let dist = d.p.distanceTo(other.p);
-                            if (dist < minDefDist) { minDefDist = dist; closestDef = other; }
-                        }
-                    });
-
-                    if (closestDef && minDefDist < 150) {
-                        let toDef = new THREE.Vector3().subVectors(closestDef.p, d.p).normalize();
-                        let isBlocking = dir.dot(toDef) > 0.5; 
-
-                        if (isBlocking) {
-                            let distToGoal = d.p.distanceTo(target);
-                            
-                            if (distToGoal < 200) {
-                                speedMult = 1.0; 
-                                
-                                if (d.v.length() < 300) { 
-                                    let slipDir = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
-                                    if (Math.sin(timeNow * 0.005) > 0) slipDir.negate();
-                                    
-                                    dir.addScaledVector(slipDir, 1.5);
-                                    dir.y += Math.cos(timeNow * 0.006) * 1.5; 
-                                    dir.normalize();
-                                }
-                            } else {
-                                let lateralVec = new THREE.Vector3().crossVectors(toDef, new THREE.Vector3(0,1,0)).normalize();
-                                let relativePos = new THREE.Vector3().subVectors(d.p, closestDef.p);
-                                if (relativePos.dot(lateralVec) < 0) lateralVec.negate();
-                                
-                                dir.addScaledVector(lateralVec, 1.2).normalize();
-                                if (d.p.y < closestDef.p.y) dir.y -= 0.5; else dir.y += 0.5;
-                                dir.normalize();
-                            }
-                        }
-                    }
-                }
-                d.v.addScaledVector(dir, d.speed * dt * speedMult); 
-                d.yaw = Math.atan2(-dir.x, -dir.z); 
-            }
-        });
-
-        for(let i=0; i<drones.length; i++) {
-            drones[i].update(dt);
-            
-            for(let j=i+1; j<drones.length; j++) resolveCollision(drones[i], drones[j]);
-
-            resolveGoalCollision(drones[i], goalPosRed, torusRadius, goalTubeRadius);
-            resolveGoalCollision(drones[i], goalPosBlue, torusRadius, goalTubeRadius);
-
-            if (drones[i].role === 'striker' && drones[i].needsReset) {
-                if (drones[i].team === 'red' && drones[i].p.x < 0) drones[i].needsReset = false;
-                if (drones[i].team === 'blue' && drones[i].p.x > 0) drones[i].needsReset = false;
-            }
-
-            if (drones[i].role === 'striker' && !drones[i].needsReset) {
-                const tGoal = drones[i].team === 'red' ? goalPosBlue : goalPosRed;
-                
-                let crossedPlane = false;
-                if (drones[i].team === 'red') {
-                    if (drones[i].prevP.x <= tGoal.x && drones[i].p.x > tGoal.x) crossedPlane = true;
-                } else {
-                    if (drones[i].prevP.x >= tGoal.x && drones[i].p.x < tGoal.x) crossedPlane = true;
-                }
-
-                if (crossedPlane) {
-                    const distFromCenter = Math.hypot(drones[i].p.y - tGoal.y, drones[i].p.z - tGoal.z);
-                    if (distFromCenter < goalInnerRadius) {
-                        drones[i].needsReset = true;
-                        if(drones[i].team === 'red') {
-                            scoreRed++; document.getElementById('score-red').innerText = scoreRed;
-                        } else {
-                            scoreBlue++; document.getElementById('score-blue').innerText = scoreBlue;
-                        }
-                    }
-                }
-            }
-        }
-
-        updateStatusPrompt();
-        renderer.render(scene, camera);
     }
 
+    function returnToMenu() {
+        gameState = 'menu';
+        document.getElementById('gameover-screen').style.display = 'none';
+        document.getElementById('start-screen').style.display = 'flex';
+    }
+
+    // --- 輸入監聽 ---
+    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    animate();
-</script>
-</body>
-</html>
+    // 觸控搖桿邏輯
+    function setupJoy(zoneId, knobId, outObj) {
+        const zone = document.getElementById(zoneId);
+        const knob = document.getElementById(knobId);
+        let touchId = null;
+
+        const update = (touch) => {
+            const rect = zone.getBoundingClientRect();
+            let dx = touch.clientX - (rect.left + rect.width/2);
+            let dy = touch.clientY - (rect.top + rect.height/2);
+            const maxDist = rect.width/2;
+            const dist = Math.hypot(dx, dy);
+            if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+            knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+            outObj.x = dx / maxDist; outObj.y = -dy / max
