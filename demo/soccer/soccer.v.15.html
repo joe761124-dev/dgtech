@@ -6,23 +6,26 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.34 (防當機與動態縮放)</title>
+    <title>無人機足球 v0.35 (保證可執行版)</title>
     <style>
-        /* --- 基礎鎖死：禁止原生網頁任何滑動行為 --- */
+        /* --- 動態高度變數 --- */
+        :root {
+            --app-height: 100vh;
+        }
+
+        /* --- 基礎鎖死 --- */
         body, html { 
-            margin: 0; padding: 0; background-color: #05050a; color: white; 
+            margin: 0; padding: 0; 
+            width: 100vw; height: var(--app-height); 
+            background-color: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             overflow: hidden; touch-action: none; overscroll-behavior: none; 
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
         }
 
-        /* --- 終極容器：高度由 JS 控制，強迫所有 UI 都在可視範圍內 --- */
         #app-container {
-            position: absolute; top: 0; left: 0; width: 100vw; 
-            overflow: hidden;
-            /* 預設 100vh，JS 會立刻將它覆寫為真實像素高度 */
-            height: 100vh; 
+            position: absolute; top: 0; left: 0; width: 100vw; height: var(--app-height); overflow: hidden;
         }
         
         canvas { 
@@ -30,7 +33,6 @@
             position: absolute; top: 0; left: 0; z-index: 1; outline: none; 
         }
         
-        /* 所有介面層都依附在 app-container 內 */
         #ui-layer, #start-screen, #gameover-screen { 
             position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
             display: flex; flex-direction: column; 
@@ -61,7 +63,6 @@
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -15px; margin-bottom: 15px; opacity: 0.9; font-weight: bold; background: rgba(255,170,0,0.2); padding: 5px 15px; border-radius: 10px;}
 
         /* --- 遊戲中 UI --- */
-        /* 左上角返回鍵 */
         #btn-back {
             position: absolute;
             top: max(10px, env(safe-area-inset-top, 10px));
@@ -79,7 +80,6 @@
         
         #fpv-scoreboard { 
             position: absolute; 
-            /* 往下推，避免跟返回鍵重疊 */
             top: calc(max(10px, env(safe-area-inset-top, 10px)) + 45px); 
             left: max(10px, env(safe-area-inset-left, 10px)); 
             pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
@@ -110,7 +110,6 @@
             position: absolute; width: 110px; height: 110px; 
             background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: auto; display: none; 
-            /* 搖桿往上浮動，避開底線 */
             bottom: max(25px, env(safe-area-inset-bottom, 25px)); 
         }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
@@ -137,8 +136,8 @@
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">📍 已修復 Safari 點擊無效與畫面遮擋 Bug</div>
-        <div class="subtitle">v0.34 | 終極動態縮放與返回鍵</div>
+        <div class="mobile-hint">✅ 已修復點擊無效 Bug，安心遊玩</div>
+        <div class="subtitle">v0.35 | 終極修復防呆版</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -195,10 +194,30 @@
 </div>
 
 <script>
-    // --- 【核心防護】動態擷取真實內部高度，強制縮放容器 ---
+    // --- 【修復：補上被遺漏的 safeRequestFullScreen 函式】 ---
+    function safeRequestFullScreen() {
+        try {
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                const promise = el.requestFullscreen();
+                // 必須檢查是否有回傳 Promise 物件，否則 Safari 會報錯崩潰
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch(e => console.log("全螢幕被阻擋(正常現象)", e));
+                }
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen(); // Safari 專用語法
+            }
+        } catch(e) {
+            console.log("忽略全螢幕報錯", e);
+        }
+        // 無論如何都要確保高度更新
+        setTimeout(updateAppHeight, 100);
+    }
+
+    // --- 動態高度適應 ---
     function updateAppHeight() {
         const realHeight = window.innerHeight;
-        // 強制改變總容器的高度
+        document.documentElement.style.setProperty('--app-height', `${realHeight}px`);
         document.getElementById('app-container').style.height = `${realHeight}px`;
         
         if (camera && renderer) {
@@ -412,24 +431,7 @@
         }
     }
 
-    // --- 【防死機全螢幕】不再讓未知的 Promise 捕捉錯誤導致崩潰 ---
-    function safeRequestFullScreen() {
-        try {
-            const el = document.documentElement;
-            if (el.requestFullscreen) {
-                let p = el.requestFullscreen();
-                if (p && typeof p.catch === 'function') p.catch(e => {});
-            } else if (el.webkitRequestFullscreen) {
-                // 蘋果舊版只支援直接呼叫，沒有 Promise
-                el.webkitRequestFullscreen();
-            }
-        } catch(e) {
-            // 完全忽略任何全螢幕引起的錯誤，確保後續邏輯順利執行
-        }
-        setTimeout(updateAppHeight, 100);
-    }
-
-    // --- 物理與結算 ---
+    // --- 物理系統 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -606,9 +608,9 @@
         animationFrameId = requestAnimationFrame(animate);
     }
 
-    // --- 遊戲流程控制 ---
+    // --- 遊戲流程 ---
     function startGame(mode) {
-        // 使用極度安全的方法呼叫全螢幕
+        // 安全進入全螢幕，防止當機
         safeRequestFullScreen();
         
         gameMode = mode;
@@ -619,7 +621,7 @@
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
         document.getElementById('top-bar').style.display = 'block';
-        document.getElementById('btn-back').style.display = 'flex'; 
+        document.getElementById('btn-back').style.display = 'flex'; // 顯示返回鍵
         
         if (mode === 'practice') document.getElementById('fpv-blue-row').style.display = 'none';
         else document.getElementById('fpv-blue-row').style.display = 'flex';
@@ -678,14 +680,14 @@
         player = null;
     }
 
-    // --- 搖桿綁定 ---
+    // --- 搖桿與事件綁定 ---
     window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
     window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
     function setupJoy(zoneId, knobId, outObj) {
         const zone = document.getElementById(zoneId);
         const knob = document.getElementById(knobId);
-        if (!zone || !knob) return; // 防呆
+        if (!zone || !knob) return;
         let touchId = null;
 
         const update = (touch) => {
