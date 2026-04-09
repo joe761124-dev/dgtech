@@ -6,11 +6,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.39 (搖桿懸浮防吃版)</title>
+    <title>無人機足球 v0.39 (橫向搖桿修復版)</title>
     <style>
         /* =========================================
-           1. 基礎重置與防呆鎖死
+           1. 基礎重置與動態高度鎖死
            ========================================= */
+        :root {
+            --app-height: 100vh;
+        }
         * { box-sizing: border-box; }
         body, html { 
             margin: 0; padding: 0; 
@@ -24,7 +27,7 @@
         
         #game-container { 
             position: relative; 
-            width: 100vw; height: 100vh; 
+            width: 100vw; height: var(--app-height); 
             overflow: hidden; 
         }
         
@@ -102,30 +105,6 @@
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        /* =========================================
-           🚀 終極解法：虛擬搖桿往上提，放棄 bottom 定位
-           ========================================= */
-        .touch-ctrl { 
-            position: absolute; width: 110px; height: 110px; 
-            background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
-            border-radius: 50%; display: none; pointer-events: auto; touch-action: none;
-            
-            /* 將搖桿定位在螢幕高度的 60% 處，徹底遠離底線的網址列與 Home Bar */
-            top: 60%;
-            transform: translateY(-50%);
-        }
-        .touch-knob { 
-            position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; 
-            background: rgba(255,255,255,0.6); border-radius: 50%; 
-            transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;
-        }
-        
-        /* 左右維持安全距離防瀏海 */
-        #joy-left { left: max(30px, env(safe-area-inset-left, 30px)); }
-        #joy-right { right: max(30px, env(safe-area-inset-right, 30px)); }
-        
-        #pc-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; display: none;}
-
         /* --- 結算畫面內容 --- */
         .go-title { font-size: 40px; font-weight: 900; font-style: italic; text-transform: uppercase; margin-bottom: 5px; color: #ffaa00;}
         .final-score-box { display: flex; align-items: center; gap: 30px; margin-bottom: 40px; margin-top: 20px;}
@@ -137,13 +116,35 @@
         .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
         .btn-restart { background: #fff; color: #000; padding: 15px 40px; font-size: 16px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); transition: 0.3s;}
 
-        @media (max-width: 850px) {
+        /* =========================================
+           3. 虛擬搖桿與跨平台 RWD 適配
+           ========================================= */
+        .touch-ctrl { 
+            position: absolute; width: 110px; height: 110px; 
+            background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
+            border-radius: 50%; pointer-events: auto; display: none; 
+            /* 搖桿位置優化：距離底部與側邊至少 30px，確保大拇指好推又不會被切掉 */
+            bottom: max(30px, env(safe-area-inset-bottom, 30px)); 
+        }
+        .touch-knob { 
+            position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; 
+            background: rgba(255,255,255,0.6); border-radius: 50%; 
+            transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;
+        }
+        
+        #joy-left { left: max(30px, env(safe-area-inset-left, 30px)); }
+        #joy-right { right: max(30px, env(safe-area-inset-right, 30px)); }
+        
+        #pc-hint { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; display: none;}
+
+        /* 【核心修復】使用 pointer: coarse 偵測觸控螢幕，不再受限於寬度 850px */
+        @media (max-width: 1024px), (pointer: coarse) {
             .touch-ctrl { display: block; } 
             #pc-hint { display: none !important; }
             .title { font-size: 40px; }
             #fpv-scoreboard { transform: scale(0.85); transform-origin: top left;}
         }
-        @media (min-width: 851px) { #pc-hint { display: block; } }
+        @media (min-width: 1025px) and (pointer: fine) { #pc-hint { display: block; } }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -178,8 +179,8 @@
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">✅ 搖桿已上提至兩側懸浮，徹底避開底線</div>
-        <div class="subtitle">v0.39 | iOS 懸浮搖桿防吃版</div>
+        <div class="mobile-hint">✅ 橫向搖桿判定修正，保證顯示於兩側</div>
+        <div class="subtitle">v0.39 | 觸控偵測修復版</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -211,12 +212,12 @@
 
 <script>
     // ==========================================
-    // 1. 動態高度與全螢幕安全處理
+    // 1. 動態高度與全螢幕處理
     // ==========================================
     function updateAppHeight() {
         const container = document.getElementById('game-container');
         const realHeight = window.innerHeight;
-        container.style.height = `${realHeight}px`;
+        document.documentElement.style.setProperty('--app-height', `${realHeight}px`);
         
         if (camera && renderer) {
             camera.aspect = window.innerWidth / realHeight;
