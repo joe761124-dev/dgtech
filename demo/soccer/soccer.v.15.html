@@ -6,20 +6,20 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.35 (保證可執行版)</title>
+    <title>無人機足球 v0.36 (iOS 終極除錯版)</title>
     <style>
         /* --- 動態高度變數 --- */
         :root {
             --app-height: 100vh;
         }
 
-        /* --- 基礎鎖死 --- */
+        /* --- 基礎鎖死 (移除全局 touch-action:none，避免殺死 iOS 點擊事件) --- */
         body, html { 
             margin: 0; padding: 0; 
             width: 100vw; height: var(--app-height); 
             background-color: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            overflow: hidden; touch-action: none; overscroll-behavior: none; 
+            overflow: hidden; overscroll-behavior: none; 
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
         }
@@ -28,9 +28,11 @@
             position: absolute; top: 0; left: 0; width: 100vw; height: var(--app-height); overflow: hidden;
         }
         
+        /* 只有需要滑動的搖桿與畫布才套用 touch-action: none */
         canvas { 
             display: block; width: 100%; height: 100%; 
             position: absolute; top: 0; left: 0; z-index: 1; outline: none; 
+            touch-action: none;
         }
         
         #ui-layer, #start-screen, #gameover-screen { 
@@ -45,6 +47,15 @@
         .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; -webkit-tap-highlight-color: transparent; }
         .btn:active { transform: scale(0.95); }
 
+        /* --- 避免 iOS 第一下點擊變成 Hover 的終極解法 --- */
+        @media (hover: hover) {
+            .btn:hover { filter: brightness(1.2); }
+            .btn-diff:hover { background: rgba(255,255,255,0.1); }
+            .btn-3v3:hover { background: #44ff44; box-shadow: 0 0 20px #44ff44; }
+            .btn-practice:hover { background: rgba(255,255,255,0.1); border-color: #55ccff; color: #55ccff; }
+            #btn-back:hover { background: rgba(255, 255, 255, 0.2); }
+        }
+
         /* --- 開始畫面 --- */
         .title { font-size: 50px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; text-align: center;}
         .title span { color: #44ff44; }
@@ -52,13 +63,12 @@
         
         .diff-selector { display: flex; align-items: center; gap: 8px; margin-bottom: 25px; pointer-events: auto; background: rgba(255,255,255,0.05); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap; justify-content: center;}
         .diff-label { font-size: 13px; color: #aaa; font-weight: bold; }
-        .btn-diff { background: transparent; color: #fff; border: 1px solid transparent; padding: 8px 16px; border-radius: 12px; font-size: 13px; cursor: pointer; transition: 0.3s; font-weight: bold; }
+        .btn-diff { background: transparent; color: #fff; border: 1px solid transparent; padding: 8px 16px; border-radius: 12px; font-size: 13px; transition: 0.3s; font-weight: bold; }
         .btn-diff.active { background: #ffaa00; color: #000; box-shadow: 0 0 15px rgba(255,170,0,0.5); }
         .btn-diff.active[data-level="easy"] { background: #44ff44; box-shadow: 0 0 15px rgba(68,255,68,0.5); }
         .btn-diff.active[data-level="hard"] { background: #ff4444; box-shadow: 0 0 15px rgba(255,68,68,0.5); color: #fff;}
 
         .btn-3v3 { background: #fff; color: #000; font-size: 18px; padding: 15px 40px; border-radius: 12px; margin-bottom: 12px; width: 260px; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-        .btn-3v3:hover { background: #44ff44; box-shadow: 0 0 20px #44ff44; }
         .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 16px; padding: 15px 40px; border-radius: 12px; width: 260px; }
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -15px; margin-bottom: 15px; opacity: 0.9; font-weight: bold; background: rgba(255,170,0,0.2); padding: 5px 15px; border-radius: 10px;}
 
@@ -74,7 +84,6 @@
             pointer-events: auto; z-index: 50; display: none; 
             align-items: center; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
-        #btn-back:hover { background: rgba(255, 255, 255, 0.2); }
 
         #top-bar { display: none; padding: 15px; pointer-events: none; }
         
@@ -110,7 +119,8 @@
             position: absolute; width: 110px; height: 110px; 
             background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: auto; display: none; 
-            bottom: max(25px, env(safe-area-inset-bottom, 25px)); 
+            bottom: max(20px, env(safe-area-inset-bottom, 20px)); 
+            touch-action: none; /* 搖桿專屬觸控保護 */
         }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
         
@@ -136,8 +146,8 @@
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">✅ 已修復點擊無效 Bug，安心遊玩</div>
-        <div class="subtitle">v0.35 | 終極修復防呆版</div>
+        <div class="mobile-hint">✅ 已修復按鈕點擊失效與畫面裁切 Bug</div>
+        <div class="subtitle">v0.36 | iOS 點擊修復與動態高度鎖定</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -194,29 +204,10 @@
 </div>
 
 <script>
-    // --- 【修復：補上被遺漏的 safeRequestFullScreen 函式】 ---
-    function safeRequestFullScreen() {
-        try {
-            const el = document.documentElement;
-            if (el.requestFullscreen) {
-                const promise = el.requestFullscreen();
-                // 必須檢查是否有回傳 Promise 物件，否則 Safari 會報錯崩潰
-                if (promise && typeof promise.catch === 'function') {
-                    promise.catch(e => console.log("全螢幕被阻擋(正常現象)", e));
-                }
-            } else if (el.webkitRequestFullscreen) {
-                el.webkitRequestFullscreen(); // Safari 專用語法
-            }
-        } catch(e) {
-            console.log("忽略全螢幕報錯", e);
-        }
-        // 無論如何都要確保高度更新
-        setTimeout(updateAppHeight, 100);
-    }
-
-    // --- 動態高度適應 ---
+    // --- 【防護 1】動態擷取真實內部高度，強制縮放容器 ---
     function updateAppHeight() {
         const realHeight = window.innerHeight;
+        // 強制改變總容器與根變數的高度，無視瀏覽器外框
         document.documentElement.style.setProperty('--app-height', `${realHeight}px`);
         document.getElementById('app-container').style.height = `${realHeight}px`;
         
@@ -227,7 +218,7 @@
         }
     }
     window.addEventListener('resize', updateAppHeight);
-    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 200)); 
+    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 250)); 
     updateAppHeight(); 
 
     // --- 音效系統 ---
@@ -431,6 +422,24 @@
         }
     }
 
+    // --- 【防護 2】安全全螢幕呼叫 ---
+    function safeRequestFullScreen() {
+        try {
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                const promise = el.requestFullscreen();
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch(e => console.log("全螢幕被阻擋(正常現象)"));
+                }
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen(); 
+            }
+        } catch(e) {
+            // 完全忽略報錯，讓遊戲繼續執行
+        }
+        setTimeout(updateAppHeight, 150);
+    }
+
     // --- 物理系統 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
@@ -608,9 +617,8 @@
         animationFrameId = requestAnimationFrame(animate);
     }
 
-    // --- 遊戲流程 ---
+    // --- 遊戲流程控制 ---
     function startGame(mode) {
-        // 安全進入全螢幕，防止當機
         safeRequestFullScreen();
         
         gameMode = mode;
@@ -621,7 +629,7 @@
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
         document.getElementById('top-bar').style.display = 'block';
-        document.getElementById('btn-back').style.display = 'flex'; // 顯示返回鍵
+        document.getElementById('btn-back').style.display = 'flex'; 
         
         if (mode === 'practice') document.getElementById('fpv-blue-row').style.display = 'none';
         else document.getElementById('fpv-blue-row').style.display = 'flex';
@@ -680,7 +688,7 @@
         player = null;
     }
 
-    // --- 搖桿與事件綁定 ---
+    // --- 搖桿綁定 ---
     window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
     window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
