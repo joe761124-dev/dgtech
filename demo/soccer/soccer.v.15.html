@@ -6,24 +6,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.29 (全平台適配版)</title>
+    <title>無人機足球 v0.30 (iOS PWA 完美版)</title>
     <style>
-        /* --- 基礎設定 (絕對鎖定、防滾動、100dvh 動態適應) --- */
+        /* --- 基礎設定 (捨棄 height，改用四角鎖死，解決 iOS 吃畫面問題) --- */
         body, html { 
-            margin: 0; padding: 0; width: 100vw; 
-            /* 使用 fixed 徹底殺死 Safari 的滑動回彈 */
-            position: fixed; top: 0; left: 0;
-            height: 100vh; /* 降級相容 */
-            height: 100dvh; /* 動態視窗高度，完美貼合 Safari 網址列變化 */
+            margin: 0; padding: 0; 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; /* 終極防溢出鎖死 */
+            width: 100%; height: 100%;
             background-color: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             overflow: hidden; touch-action: none; overscroll-behavior: none; 
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
         }
-        canvas { display: block; width: 100vw; height: 100dvh; position: absolute; top: 0; left: 0; z-index: 1; outline: none; }
+        canvas { display: block; width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; outline: none; }
         
         /* --- UI 共用圖層 --- */
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100dvh; pointer-events: none; z-index: 10; display: flex; flex-direction: column; }
+        #ui-layer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; }
         .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; -webkit-tap-highlight-color: transparent; }
         .btn:active { transform: scale(0.95); }
 
@@ -35,11 +33,11 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5); transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             display: flex; align-items: center; gap: 8px; width: max-content;
         }
-        #ios-hint.show { top: 20px; }
+        #ios-hint.show { top: env(safe-area-inset-top, 20px); }
         .close-hint { background: #333; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; margin-left: 10px;}
 
         /* --- 開始畫面 --- */
-        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100dvh; background: rgba(5, 5, 10, 0.95); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #start-screen { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(5, 5, 10, 0.95); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
         .title { font-size: 50px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; text-align: center;}
         .title span { color: #44ff44; }
         .subtitle { font-size: 13px; color: rgba(255,255,255,0.6); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 25px; font-weight: bold; text-align: center; padding: 0 20px;}
@@ -58,7 +56,7 @@
 
         /* --- 遊戲中 UI (FPV 視角風格) --- */
         #top-bar { display: none; padding: 15px; pointer-events: none; }
-        #fpv-scoreboard { position: absolute; top: env(safe-area-inset-top, 5vh); left: env(safe-area-inset-left, 5vw); pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);}
+        #fpv-scoreboard { position: absolute; top: calc(20px + env(safe-area-inset-top)); left: calc(20px + env(safe-area-inset-left)); pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);}
         .fpv-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 3px; }
         .fpv-num { font-size: 22px; font-weight: bold; color: #44ff44; text-shadow: 0 0 8px #44ff44;}
         .fpv-score-red { color: #ff5555; text-shadow: 0 0 10px #ff5555;}
@@ -70,7 +68,7 @@
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         /* --- 結算畫面 --- */
-        #gameover-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100dvh; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        #gameover-screen { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; }
         .go-title { font-size: 40px; font-weight: 900; font-style: italic; text-transform: uppercase; margin-bottom: 5px; color: #ffaa00;}
         .final-score-box { display: flex; align-items: center; gap: 30px; margin-bottom: 40px; margin-top: 20px;}
         .fs-team { display: flex; flex-direction: column; align-items: center; }
@@ -81,24 +79,27 @@
         .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
         .btn-restart { background: #fff; color: #000; padding: 15px 40px; font-size: 16px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
 
-        /* --- 虛擬搖桿 --- */
+        /* --- 虛擬搖桿 (終極 iOS 防吃畫面配置) --- */
         .touch-ctrl { 
             position: absolute; width: 120px; height: 120px; 
             background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: auto; display: none; 
-            bottom: env(safe-area-inset-bottom, 20px); 
+            /* 使用 calc 強制將搖桿墊高，遠離底部的 Home Bar */
+            bottom: calc(25px + env(safe-area-inset-bottom, 0px)); 
         }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 50%; height: 50%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
-        #joy-left { left: env(safe-area-inset-left, 20px); }
-        #joy-right { right: env(safe-area-inset-right, 20px); }
+        
+        /* 左右兩側也要內縮，避開瀏海/動態島 */
+        #joy-left { left: calc(25px + env(safe-area-inset-left, 0px)); }
+        #joy-right { right: calc(25px + env(safe-area-inset-right, 0px)); }
         
         #pc-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
 
-        @media (max-width: 800px) {
+        @media (max-width: 850px) {
             .touch-ctrl { display: block; } 
             #pc-hint { display: none !important; }
         }
-        @media (min-width: 801px) { #pc-hint { display: block; } }
+        @media (min-width: 851px) { #pc-hint { display: block; } }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
@@ -113,8 +114,8 @@
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">📍 Chrome 自動全螢幕 | Safari 請隱藏工具列或加入主畫面</div>
-        <div class="subtitle">v0.29 | 全平台 100dvh 防阻擋適配版</div>
+        <div class="mobile-hint">📍 Chrome 自動全螢幕 | iOS 已套用 PWA 防阻擋配置</div>
+        <div class="subtitle">v0.30 | 終極全螢幕修復版 (防瀏海/Home Bar)</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -315,7 +316,9 @@
         camera.lookAt(-100, 100, 0); 
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        // 確保 WebGL 畫布與視窗絕對吻合
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setClearColor(0x000000, 0);
 
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -389,15 +392,13 @@
                     screen.orientation.lock('landscape').catch(()=>{});
                 }
             }).catch((err) => {
-                // 全螢幕被瀏覽器阻擋 (如 Safari)
                 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
                 if(isIOS && !window.navigator.standalone) {
                     document.getElementById('ios-hint').classList.add('show');
-                    setTimeout(hideIOSHint, 6000); // 6秒後自動收起
+                    setTimeout(hideIOSHint, 6000);
                 }
             });
         } else {
-            // 完全不支援 (iPhone Safari 預設)
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             if(isIOS && !window.navigator.standalone) {
                 document.getElementById('ios-hint').classList.add('show');
@@ -643,24 +644,25 @@
         document.getElementById('start-screen').style.display = 'flex';
     }
 
-    // --- 監聽器與觸控搖桿核心防偏移修正 ---
-    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
-    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+    // --- 視窗適應 ---
     window.addEventListener('resize', () => {
-        // 確保視窗改變時 (例如Safari隱藏網址列)，畫布跟著重新適應
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // --- 鍵盤監聽 ---
+    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+
+    // --- 觸控搖桿核心 (加入即時座標計算防偏移) ---
     function setupJoy(zoneId, knobId, outObj) {
         const zone = document.getElementById(zoneId);
         const knob = document.getElementById(knobId);
         let touchId = null;
 
         const update = (touch) => {
-            // 核心：每次觸控即時抓取最新邊界，無視畫面縮放與偏移
-            const rect = zone.getBoundingClientRect();
+            const rect = zone.getBoundingClientRect(); // 絕對關鍵：即時抓取最新邊界
             let dx = touch.clientX - (rect.left + rect.width/2);
             let dy = touch.clientY - (rect.top + rect.height/2);
             const maxDist = rect.width/2;
@@ -670,7 +672,6 @@
             outObj.x = dx / maxDist; outObj.y = -dy / maxDist;
         };
 
-        // 必須設定 {passive: false} 才能用 preventDefault 擋掉原生滾動
         zone.addEventListener('touchstart', e => { if(e.cancelable) e.preventDefault(); touchId = e.changedTouches[0].identifier; update(e.changedTouches[0]); }, {passive: false});
         zone.addEventListener('touchmove', e => { if(e.cancelable) e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) update(t); }, {passive: false});
         const reset = () => { touchId = null; knob.style.transform = `translate(-50%, -50%)`; outObj.x = 0; outObj.y = 0; };
@@ -680,6 +681,7 @@
     setupJoy('joy-left', 'knob-left', joyLeft);
     setupJoy('joy-right', 'knob-right', joyRight);
 
+    // --- 啟動遊戲引擎 ---
     initThreeJS();
     animate();
 
