@@ -6,77 +6,95 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.37 (iOS 破壁者終極版)</title>
+    <title>無人機足球 v0.38 (終極堅不可摧版)</title>
     <style>
-        /* --- 基礎設定 (移除全域 touch-action:none，拯救點擊失效) --- */
+        /* =========================================
+           1. 基礎重置與防呆鎖死
+           ========================================= */
+        * { box-sizing: border-box; }
         body, html { 
             margin: 0; padding: 0; 
-            width: 100vw; 
-            background-color: #05050a; color: white; 
+            width: 100%; height: 100%; 
+            background: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            overflow: hidden; overscroll-behavior: none; 
+            overflow: hidden; 
+            touch-action: none; /* 關閉瀏覽器預設的雙擊放大與滑動 */
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-            /* 改用 absolute 確保 iOS 點擊事件能正確向下傳遞 */
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
         }
         
-        /* 畫布專屬防滑動 */
+        /* 終極容器：JS 會保證它的高度永遠等於真實螢幕高度 */
+        #game-container { 
+            position: relative; 
+            width: 100vw; height: 100vh; 
+            overflow: hidden; 
+        }
+        
         canvas { 
-            display: block; width: 100%; height: 100%; 
-            position: absolute; top: 0; left: 0; z-index: 1; outline: none; 
-            touch-action: none; 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; z-index: 1; outline: none; 
         }
-        
-        /* 介面層：高度會由 JS 動態完美貼合 */
-        #ui-layer, #start-screen, #gameover-screen { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            display: flex; flex-direction: column; 
-        }
-        
-        #ui-layer { pointer-events: none; z-index: 10; }
-        #start-screen { background: rgba(5, 5, 10, 0.95); z-index: 100; justify-content: center; align-items: center; }
-        #gameover-screen { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px); z-index: 100; display: none; justify-content: center; align-items: center; }
 
-        .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; -webkit-tap-highlight-color: transparent; }
+        /* 共用按鈕樣式 */
+        .btn { 
+            cursor: pointer; pointer-events: auto; 
+            font-weight: bold; border: none; outline: none; 
+            transition: 0.2s transform; -webkit-tap-highlight-color: transparent;
+        }
         .btn:active { transform: scale(0.95); }
 
-        /* --- 開始畫面 --- */
+        /* 僅在支援 hover 的裝置(電腦)上啟用 hover 特效，避免 iOS 點擊雙擊 Bug */
+        @media (hover: hover) {
+            .btn-diff:hover { background: rgba(255,255,255,0.1); }
+            .btn-3v3:hover { background: #44ff44 !important; box-shadow: 0 0 20px #44ff44 !important; }
+            .btn-practice:hover { background: rgba(255,255,255,0.1) !important; border-color: #55ccff !important; color: #55ccff !important; }
+            .btn-restart:hover { transform: scale(1.05) !important; }
+            #btn-back:hover { background: rgba(255,255,255,0.2) !important; }
+        }
+
+        /* =========================================
+           2. 各大畫面圖層
+           ========================================= */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
+        #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(5,5,10,0.95); }
+        #gameover-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+        /* --- 開始畫面內容 --- */
         .title { font-size: 50px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; text-align: center;}
         .title span { color: #44ff44; }
         .subtitle { font-size: 13px; color: rgba(255,255,255,0.6); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 25px; font-weight: bold; text-align: center; padding: 0 20px;}
         
         .diff-selector { display: flex; align-items: center; gap: 8px; margin-bottom: 25px; pointer-events: auto; background: rgba(255,255,255,0.05); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); flex-wrap: wrap; justify-content: center;}
         .diff-label { font-size: 13px; color: #aaa; font-weight: bold; }
-        .btn-diff { background: transparent; color: #fff; border: 1px solid transparent; padding: 8px 16px; border-radius: 12px; font-size: 13px; transition: 0.3s; font-weight: bold; }
+        .btn-diff { background: transparent; color: #fff; border: 1px solid transparent; padding: 8px 16px; border-radius: 12px; font-size: 13px; transition: background 0.3s; }
         .btn-diff.active { background: #ffaa00; color: #000; box-shadow: 0 0 15px rgba(255,170,0,0.5); }
         .btn-diff.active[data-level="easy"] { background: #44ff44; box-shadow: 0 0 15px rgba(68,255,68,0.5); }
         .btn-diff.active[data-level="hard"] { background: #ff4444; box-shadow: 0 0 15px rgba(255,68,68,0.5); color: #fff;}
 
-        .btn-3v3 { background: #fff; color: #000; font-size: 18px; padding: 15px 40px; border-radius: 12px; margin-bottom: 12px; width: 260px; box-shadow: 0 0 20px rgba(255,255,255,0.2); }
-        .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 16px; padding: 15px 40px; border-radius: 12px; width: 260px; }
+        .btn-3v3 { background: #fff; color: #000; font-size: 18px; padding: 15px 40px; border-radius: 12px; margin-bottom: 12px; width: 260px; box-shadow: 0 0 20px rgba(255,255,255,0.2); transition: all 0.3s; }
+        .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 16px; padding: 15px 40px; border-radius: 12px; width: 260px; transition: all 0.3s; }
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -15px; margin-bottom: 15px; opacity: 0.9; font-weight: bold; background: rgba(255,170,0,0.2); padding: 5px 15px; border-radius: 10px;}
 
         /* --- 遊戲中 UI --- */
-        /* 左上角返回鍵 */
         #btn-back {
             position: absolute;
-            top: max(10px, env(safe-area-inset-top, 10px));
-            left: max(10px, env(safe-area-inset-left, 10px));
+            top: max(15px, env(safe-area-inset-top, 15px));
+            left: max(15px, env(safe-area-inset-left, 15px));
             background: rgba(0, 0, 0, 0.7);
             border: 1px solid rgba(255, 255, 255, 0.2);
             color: white; padding: 8px 15px; border-radius: 8px;
-            font-size: 14px; font-weight: bold;
-            pointer-events: auto; z-index: 50; display: none; 
-            align-items: center; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-size: 14px; display: none; align-items: center; gap: 5px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
 
-        #top-bar { display: none; padding: 15px; pointer-events: none; }
-        
         #fpv-scoreboard { 
             position: absolute; 
-            top: calc(max(10px, env(safe-area-inset-top, 10px)) + 45px); 
-            left: max(10px, env(safe-area-inset-left, 10px)); 
-            pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+            /* 往下推，避免跟返回鍵重疊 */
+            top: calc(max(15px, env(safe-area-inset-top, 15px)) + 45px); 
+            left: max(15px, env(safe-area-inset-left, 15px)); 
+            border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); 
+            padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); 
+            font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+            display: none; /* 遊戲開始才顯示 */
         }
         .fpv-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 3px; }
         .fpv-num { font-size: 22px; font-weight: bold; color: #44ff44; text-shadow: 0 0 8px #44ff44;}
@@ -88,7 +106,22 @@
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        /* --- 結算畫面 --- */
+        /* --- 虛擬搖桿 (強制鎖底，避開瀏海) --- */
+        .touch-ctrl { 
+            position: absolute; width: 110px; height: 110px; 
+            background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
+            border-radius: 50%; display: none; 
+            bottom: max(25px, env(safe-area-inset-bottom, 25px)); 
+            pointer-events: auto;
+        }
+        .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
+        
+        #joy-left { left: max(20px, env(safe-area-inset-left, 20px)); }
+        #joy-right { right: max(20px, env(safe-area-inset-right, 20px)); }
+        
+        #pc-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; display: none;}
+
+        /* --- 結算畫面內容 --- */
         .go-title { font-size: 40px; font-weight: 900; font-style: italic; text-transform: uppercase; margin-bottom: 5px; color: #ffaa00;}
         .final-score-box { display: flex; align-items: center; gap: 30px; margin-bottom: 40px; margin-top: 20px;}
         .fs-team { display: flex; flex-direction: column; align-items: center; }
@@ -97,23 +130,7 @@
         .score-red { color: #ff5555; text-shadow: 0 0 15px rgba(255,85,85,0.7); }
         .score-blue { color: #5555ff; text-shadow: 0 0 15px rgba(85,85,255,0.7); }
         .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
-        .btn-restart { background: #fff; color: #000; padding: 15px 40px; font-size: 16px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
-
-        /* --- 虛擬搖桿 --- */
-        .touch-ctrl { 
-            position: absolute; width: 110px; height: 110px; 
-            background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
-            border-radius: 50%; pointer-events: auto; display: none; 
-            /* 搖桿往上浮動，避開底線 */
-            bottom: max(25px, env(safe-area-inset-bottom, 25px)); 
-            touch-action: none; /* 搖桿專屬觸控保護 */
-        }
-        .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
-        
-        #joy-left { left: max(20px, env(safe-area-inset-left, 20px)); }
-        #joy-right { right: max(20px, env(safe-area-inset-right, 20px)); }
-        
-        #pc-hint { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; padding: 8px 20px; border-radius: 20px; pointer-events: none; display: none;}
+        .btn-restart { background: #fff; color: #000; padding: 15px 40px; font-size: 16px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); transition: 0.3s;}
 
         @media (max-width: 850px) {
             .touch-ctrl { display: block; } 
@@ -127,48 +144,47 @@
 </head>
 <body>
 
+<div id="game-container">
     <canvas id="game-canvas"></canvas>
 
-    <div id="start-screen">
-        <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">✅ 已啟用 iOS 原生觸控防護與滿版校正</div>
-        <div class="subtitle">v0.37 | iOS 破壁者終極版</div>
-        
-        <div class="diff-selector">
-            <span class="diff-label">AI 難度：</span>
-            <button class="btn btn-diff" data-level="easy" onclick="setDifficulty('easy')" ontouchend="setDifficulty('easy'); event.preventDefault();">簡單</button>
-            <button class="btn btn-diff" data-level="medium" onclick="setDifficulty('medium')" ontouchend="setDifficulty('medium'); event.preventDefault();">普通</button>
-            <button class="btn btn-diff active" data-level="hard" onclick="setDifficulty('hard')" ontouchend="setDifficulty('hard'); event.preventDefault();">困難</button>
-        </div>
-
-        <button class="btn btn-3v3" onclick="startGame('3v3')" ontouchend="startGame('3v3'); event.preventDefault();">3V3 競賽模式</button>
-        <button class="btn btn-practice" onclick="startGame('practice')" ontouchend="startGame('practice'); event.preventDefault();">單人練習模式</button>
-    </div>
-
     <div id="ui-layer">
-        <button id="btn-back" class="btn" onclick="returnToMenu()" ontouchend="returnToMenu(); event.preventDefault();">◀ 返回主選單</button>
+        <button id="btn-back" class="btn">◀ 返回主選單</button>
 
-        <div id="top-bar">
-            <div id="fpv-scoreboard">
-                <div class="fpv-score-row">
-                    <span class="fpv-num fpv-score-red" id="score-red">00</span>
-                    <span class="fpv-label">紅隊 / RED</span>
-                </div>
-                <div class="fpv-score-row" id="fpv-blue-row">
-                    <span class="fpv-num" id="score-blue" style="color: #5555ff; text-shadow: 0 0 10px #5555ff;">00</span>
-                    <span class="fpv-label" style="color: #5555ff;">藍隊 / BLU</span>
-                </div>
-                <div class="fpv-score-row" style="margin-top: 8px;">
-                    <span class="fpv-timer" id="timer">03:00</span>
-                    <span class="fpv-label">時間 / TIME</span>
-                </div>
-                <div id="status-prompt">🟢 可以進攻 STATUS: OK</div>
+        <div id="fpv-scoreboard">
+            <div class="fpv-score-row">
+                <span class="fpv-num fpv-score-red" id="score-red">00</span>
+                <span class="fpv-label">紅隊 / RED</span>
             </div>
+            <div class="fpv-score-row" id="fpv-blue-row">
+                <span class="fpv-num" id="score-blue" style="color: #5555ff; text-shadow: 0 0 10px #5555ff;">00</span>
+                <span class="fpv-label" style="color: #5555ff;">藍隊 / BLU</span>
+            </div>
+            <div class="fpv-score-row" style="margin-top: 8px;">
+                <span class="fpv-timer" id="timer">03:00</span>
+                <span class="fpv-label">時間 / TIME</span>
+            </div>
+            <div id="status-prompt">🟢 可以進攻 STATUS: OK</div>
         </div>
 
         <div id="joy-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
         <div id="joy-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
         <div id="pc-hint">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移</div>
+    </div>
+
+    <div id="start-screen">
+        <h1 class="title">無人機<span>足球</span></h1>
+        <div class="mobile-hint">✅ 安全事件綁定，防縮放與崩潰修復</div>
+        <div class="subtitle">v0.38 | 堅不可摧動態滿版</div>
+        
+        <div class="diff-selector">
+            <span class="diff-label">AI 難度：</span>
+            <button id="btn-easy" class="btn btn-diff" data-level="easy">簡單</button>
+            <button id="btn-medium" class="btn btn-diff" data-level="medium">普通</button>
+            <button id="btn-hard" class="btn btn-diff active" data-level="hard">困難</button>
+        </div>
+
+        <button id="btn-3v3" class="btn btn-3v3">3V3 競賽模式</button>
+        <button id="btn-practice" class="btn btn-practice">單人練習模式</button>
     </div>
 
     <div id="gameover-screen">
@@ -184,19 +200,18 @@
                 <div class="fs-label" style="color: #5555ff;">藍隊</div>
             </div>
         </div>
-        <button class="btn btn-restart" onclick="returnToMenu()" ontouchend="returnToMenu(); event.preventDefault();">返回主選單</button>
+        <button id="btn-restart" class="btn btn-restart">返回主選單</button>
     </div>
+</div>
 
 <script>
-    // --- 【防護 1】無盡迴圈高度校正 (打敗 iOS 隱形變形) ---
-    let lastHeight = window.innerHeight;
+    // ==========================================
+    // 1. 動態高度與全螢幕安全處理 (打敗 iOS 裁切)
+    // ==========================================
     function updateAppHeight() {
+        const container = document.getElementById('game-container');
         const realHeight = window.innerHeight;
-        // 將所有 UI 容器強制設定為真實像素高度
-        document.body.style.height = `${realHeight}px`;
-        document.getElementById('start-screen').style.height = `${realHeight}px`;
-        document.getElementById('ui-layer').style.height = `${realHeight}px`;
-        document.getElementById('gameover-screen').style.height = `${realHeight}px`;
+        container.style.height = `${realHeight}px`;
         
         if (camera && renderer) {
             camera.aspect = window.innerWidth / realHeight;
@@ -205,15 +220,31 @@
         }
     }
     window.addEventListener('resize', updateAppHeight);
-    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 300)); 
-    updateAppHeight(); 
+    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 200));
 
-    // --- 音效系統 ---
+    function safeRequestFullScreen() {
+        try {
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                const promise = el.requestFullscreen();
+                if (promise && typeof promise.catch === 'function') {
+                    promise.catch(() => {}); // 靜默攔截
+                }
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen(); 
+            }
+        } catch(e) {}
+        setTimeout(updateAppHeight, 150);
+    }
+
+    // ==========================================
+    // 2. 遊戲參數與全域變數
+    // ==========================================
     const sfxScore = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3');
     const sfxHit = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-metal-hit-clank-2144.mp3');
     sfxScore.volume = 0.5; sfxHit.volume = 0.4;
     function playSound(audioObj) {
-        if(audioObj.readyState >= 2) { audioObj.currentTime = 0; audioObj.play().catch(e => {}); }
+        if(audioObj.readyState >= 2) { audioObj.currentTime = 0; audioObj.play().catch(()=>{}); }
     }
 
     const PITCH = { w: 800, h: 300, d: 400 }; 
@@ -231,14 +262,6 @@
     };
     let currentDifficulty = 'hard';
 
-    function setDifficulty(level) {
-        currentDifficulty = level;
-        document.querySelectorAll('.btn-diff').forEach(btn => {
-            if(btn.dataset.level === level) btn.classList.add('active');
-            else btn.classList.remove('active');
-        });
-    }
-
     const canvas = document.getElementById('game-canvas');
     let scene, camera, renderer, clock;
     let drones = [];
@@ -254,6 +277,9 @@
     const joyLeft = { x: 0, y: 0 };
     const joyRight = { x: 0, y: 0 };
 
+    // ==========================================
+    // 3. 實體與 Three.js 引擎
+    // ==========================================
     class Drone {
         constructor(x, y, z, colorHex, role, team) {
             this.p = new THREE.Vector3(x, y, z);
@@ -385,6 +411,9 @@
         clock = new THREE.Clock();
     }
 
+    // ==========================================
+    // 4. 物理運算與遊戲迴圈
+    // ==========================================
     function updateUI() {
         document.getElementById('score-red').innerText = score.red.toString().padStart(2, '0');
         document.getElementById('score-blue').innerText = score.blue.toString().padStart(2, '0');
@@ -409,22 +438,6 @@
         }
     }
 
-    // --- 【防護 2】全螢幕極度安全呼叫 ---
-    function safeRequestFullScreen() {
-        try {
-            const el = document.documentElement;
-            if (el.requestFullscreen) {
-                const promise = el.requestFullscreen();
-                if (promise && typeof promise.catch === 'function') {
-                    promise.catch(e => {}); // 完全忽略報錯，不干擾主線程
-                }
-            }
-        } catch(e) {}
-        // 確保視窗重新計算
-        setTimeout(updateAppHeight, 150);
-    }
-
-    // --- 物理系統 ---
     function resolveCollision(d1, d2) {
         const diff = new THREE.Vector3().subVectors(d2.p, d1.p);
         const dist = diff.length();
@@ -433,7 +446,6 @@
             let normal = diff.clone().normalize();
             normal.x += (Math.random() - 0.5) * 0.4; normal.y += (Math.random() - 0.5) * 0.4; normal.z += (Math.random() - 0.5) * 0.4;
             normal.normalize();
-
             const totalMass = d1.mass + d2.mass;
             d1.p.addScaledVector(normal, -(minDist - dist) * (d2.mass / totalMass));
             d2.p.addScaledVector(normal, (minDist - dist) * (d1.mass / totalMass));
@@ -494,14 +506,7 @@
         }
     }
 
-    // --- 主渲染迴圈 ---
     function animate() {
-        // 如果高度不小心跑掉，在這裡每幀持續校正
-        if(window.innerHeight !== lastHeight) {
-            lastHeight = window.innerHeight;
-            updateAppHeight();
-        }
-
         if (gameState !== 'playing') {
             clock.getDelta(); 
             renderer.render(scene, camera);
@@ -607,10 +612,19 @@
         animationFrameId = requestAnimationFrame(animate);
     }
 
-    // --- 遊戲流程控制 ---
+    // ==========================================
+    // 5. 流程控制與無敵安全綁定
+    // ==========================================
+    function setDifficultyMode(level) {
+        currentDifficulty = level;
+        document.getElementById('btn-easy').classList.remove('active');
+        document.getElementById('btn-medium').classList.remove('active');
+        document.getElementById('btn-hard').classList.remove('active');
+        document.getElementById('btn-' + level).classList.add('active');
+    }
+
     function startGame(mode) {
         safeRequestFullScreen();
-        
         gameMode = mode;
         gameState = 'playing';
         score = { red: 0, blue: 0 };
@@ -618,7 +632,7 @@
         
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
-        document.getElementById('top-bar').style.display = 'block';
+        document.getElementById('fpv-scoreboard').style.display = 'block';
         document.getElementById('btn-back').style.display = 'flex'; 
         
         if (mode === 'practice') document.getElementById('fpv-blue-row').style.display = 'none';
@@ -650,7 +664,7 @@
     function gameOver() {
         gameState = 'gameover';
         clearInterval(gameTimerId);
-        document.getElementById('top-bar').style.display = 'none';
+        document.getElementById('fpv-scoreboard').style.display = 'none';
         document.getElementById('btn-back').style.display = 'none'; 
         document.getElementById('gameover-screen').style.display = 'flex';
         document.getElementById('final-red').innerText = score.red.toString().padStart(2, '0');
@@ -669,7 +683,7 @@
         gameState = 'menu';
         clearInterval(gameTimerId); 
         document.getElementById('gameover-screen').style.display = 'none';
-        document.getElementById('top-bar').style.display = 'none';
+        document.getElementById('fpv-scoreboard').style.display = 'none';
         document.getElementById('btn-back').style.display = 'none';
         document.getElementById('start-screen').style.display = 'flex';
         
@@ -677,10 +691,6 @@
         drones = [];
         player = null;
     }
-
-    // --- 搖桿綁定 ---
-    window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
-    window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
 
     function setupJoy(zoneId, knobId, outObj) {
         const zone = document.getElementById(zoneId);
@@ -699,18 +709,36 @@
             outObj.x = dx / maxDist; outObj.y = -dy / maxDist;
         };
 
-        zone.addEventListener('touchstart', e => { if(e.cancelable) e.preventDefault(); touchId = e.changedTouches[0].identifier; update(e.changedTouches[0]); }, {passive: false});
-        zone.addEventListener('touchmove', e => { if(e.cancelable) e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) update(t); }, {passive: false});
+        zone.addEventListener('touchstart', e => { e.preventDefault(); touchId = e.changedTouches[0].identifier; update(e.changedTouches[0]); }, {passive: false});
+        zone.addEventListener('touchmove', e => { e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) update(t); }, {passive: false});
         const reset = () => { touchId = null; knob.style.transform = `translate(-50%, -50%)`; outObj.x = 0; outObj.y = 0; };
         zone.addEventListener('touchend', reset); zone.addEventListener('touchcancel', reset);
     }
 
-    setupJoy('joy-left', 'knob-left', joyLeft);
-    setupJoy('joy-right', 'knob-right', joyRight);
+    // --- 【系統啟動：安全的事件綁定】 ---
+    window.onload = () => {
+        // 綁定難度按鈕
+        document.getElementById('btn-easy').addEventListener('click', () => setDifficultyMode('easy'));
+        document.getElementById('btn-medium').addEventListener('click', () => setDifficultyMode('medium'));
+        document.getElementById('btn-hard').addEventListener('click', () => setDifficultyMode('hard'));
+        
+        // 綁定開始與返回按鈕
+        document.getElementById('btn-3v3').addEventListener('click', () => startGame('3v3'));
+        document.getElementById('btn-practice').addEventListener('click', () => startGame('practice'));
+        document.getElementById('btn-back').addEventListener('click', returnToMenu);
+        document.getElementById('btn-restart').addEventListener('click', returnToMenu);
 
-    // 啟動
-    initThreeJS();
-    animate();
+        // 綁定鍵盤
+        window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+
+        // 初始化
+        setupJoy('joy-left', 'knob-left', joyLeft);
+        setupJoy('joy-right', 'knob-right', joyRight);
+        initThreeJS();
+        updateAppHeight(); // 確保一載入就拿到真實高度
+        animate();
+    };
 
 </script>
 </body>
