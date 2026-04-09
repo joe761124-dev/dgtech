@@ -6,37 +6,30 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.36 (iOS 終極除錯版)</title>
+    <title>無人機足球 v0.37 (iOS 破壁者終極版)</title>
     <style>
-        /* --- 動態高度變數 --- */
-        :root {
-            --app-height: 100vh;
-        }
-
-        /* --- 基礎鎖死 (移除全局 touch-action:none，避免殺死 iOS 點擊事件) --- */
+        /* --- 基礎設定 (移除全域 touch-action:none，拯救點擊失效) --- */
         body, html { 
             margin: 0; padding: 0; 
-            width: 100vw; height: var(--app-height); 
+            width: 100vw; 
             background-color: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             overflow: hidden; overscroll-behavior: none; 
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        }
-
-        #app-container {
-            position: absolute; top: 0; left: 0; width: 100vw; height: var(--app-height); overflow: hidden;
+            /* 改用 absolute 確保 iOS 點擊事件能正確向下傳遞 */
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
         }
         
-        /* 只有需要滑動的搖桿與畫布才套用 touch-action: none */
+        /* 畫布專屬防滑動 */
         canvas { 
             display: block; width: 100%; height: 100%; 
             position: absolute; top: 0; left: 0; z-index: 1; outline: none; 
-            touch-action: none;
+            touch-action: none; 
         }
         
+        /* 介面層：高度會由 JS 動態完美貼合 */
         #ui-layer, #start-screen, #gameover-screen { 
-            position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             display: flex; flex-direction: column; 
         }
         
@@ -46,15 +39,6 @@
 
         .btn { pointer-events: auto; cursor: pointer; transition: all 0.2s; text-align: center; border: none; outline: none; font-weight: bold; -webkit-tap-highlight-color: transparent; }
         .btn:active { transform: scale(0.95); }
-
-        /* --- 避免 iOS 第一下點擊變成 Hover 的終極解法 --- */
-        @media (hover: hover) {
-            .btn:hover { filter: brightness(1.2); }
-            .btn-diff:hover { background: rgba(255,255,255,0.1); }
-            .btn-3v3:hover { background: #44ff44; box-shadow: 0 0 20px #44ff44; }
-            .btn-practice:hover { background: rgba(255,255,255,0.1); border-color: #55ccff; color: #55ccff; }
-            #btn-back:hover { background: rgba(255, 255, 255, 0.2); }
-        }
 
         /* --- 開始畫面 --- */
         .title { font-size: 50px; font-weight: 900; font-style: italic; color: #fff; text-shadow: 0 0 20px #44ff44; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; text-align: center;}
@@ -73,6 +57,7 @@
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -15px; margin-bottom: 15px; opacity: 0.9; font-weight: bold; background: rgba(255,170,0,0.2); padding: 5px 15px; border-radius: 10px;}
 
         /* --- 遊戲中 UI --- */
+        /* 左上角返回鍵 */
         #btn-back {
             position: absolute;
             top: max(10px, env(safe-area-inset-top, 10px));
@@ -119,7 +104,8 @@
             position: absolute; width: 110px; height: 110px; 
             background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: auto; display: none; 
-            bottom: max(20px, env(safe-area-inset-bottom, 20px)); 
+            /* 搖桿往上浮動，避開底線 */
+            bottom: max(25px, env(safe-area-inset-bottom, 25px)); 
             touch-action: none; /* 搖桿專屬觸控保護 */
         }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
@@ -141,27 +127,26 @@
 </head>
 <body>
 
-<div id="app-container">
     <canvas id="game-canvas"></canvas>
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">✅ 已修復按鈕點擊失效與畫面裁切 Bug</div>
-        <div class="subtitle">v0.36 | iOS 點擊修復與動態高度鎖定</div>
+        <div class="mobile-hint">✅ 已啟用 iOS 原生觸控防護與滿版校正</div>
+        <div class="subtitle">v0.37 | iOS 破壁者終極版</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
-            <button class="btn btn-diff" data-level="easy" onclick="setDifficulty('easy')">簡單</button>
-            <button class="btn btn-diff" data-level="medium" onclick="setDifficulty('medium')">普通</button>
-            <button class="btn btn-diff active" data-level="hard" onclick="setDifficulty('hard')">困難</button>
+            <button class="btn btn-diff" data-level="easy" onclick="setDifficulty('easy')" ontouchend="setDifficulty('easy'); event.preventDefault();">簡單</button>
+            <button class="btn btn-diff" data-level="medium" onclick="setDifficulty('medium')" ontouchend="setDifficulty('medium'); event.preventDefault();">普通</button>
+            <button class="btn btn-diff active" data-level="hard" onclick="setDifficulty('hard')" ontouchend="setDifficulty('hard'); event.preventDefault();">困難</button>
         </div>
 
-        <button class="btn btn-3v3" onclick="startGame('3v3')">3V3 競賽模式</button>
-        <button class="btn btn-practice" onclick="startGame('practice')">單人練習模式</button>
+        <button class="btn btn-3v3" onclick="startGame('3v3')" ontouchend="startGame('3v3'); event.preventDefault();">3V3 競賽模式</button>
+        <button class="btn btn-practice" onclick="startGame('practice')" ontouchend="startGame('practice'); event.preventDefault();">單人練習模式</button>
     </div>
 
     <div id="ui-layer">
-        <button id="btn-back" class="btn" onclick="returnToMenu()">◀ 返回主選單</button>
+        <button id="btn-back" class="btn" onclick="returnToMenu()" ontouchend="returnToMenu(); event.preventDefault();">◀ 返回主選單</button>
 
         <div id="top-bar">
             <div id="fpv-scoreboard">
@@ -199,17 +184,19 @@
                 <div class="fs-label" style="color: #5555ff;">藍隊</div>
             </div>
         </div>
-        <button class="btn btn-restart" onclick="returnToMenu()">返回主選單</button>
+        <button class="btn btn-restart" onclick="returnToMenu()" ontouchend="returnToMenu(); event.preventDefault();">返回主選單</button>
     </div>
-</div>
 
 <script>
-    // --- 【防護 1】動態擷取真實內部高度，強制縮放容器 ---
+    // --- 【防護 1】無盡迴圈高度校正 (打敗 iOS 隱形變形) ---
+    let lastHeight = window.innerHeight;
     function updateAppHeight() {
         const realHeight = window.innerHeight;
-        // 強制改變總容器與根變數的高度，無視瀏覽器外框
-        document.documentElement.style.setProperty('--app-height', `${realHeight}px`);
-        document.getElementById('app-container').style.height = `${realHeight}px`;
+        // 將所有 UI 容器強制設定為真實像素高度
+        document.body.style.height = `${realHeight}px`;
+        document.getElementById('start-screen').style.height = `${realHeight}px`;
+        document.getElementById('ui-layer').style.height = `${realHeight}px`;
+        document.getElementById('gameover-screen').style.height = `${realHeight}px`;
         
         if (camera && renderer) {
             camera.aspect = window.innerWidth / realHeight;
@@ -218,7 +205,7 @@
         }
     }
     window.addEventListener('resize', updateAppHeight);
-    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 250)); 
+    window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 300)); 
     updateAppHeight(); 
 
     // --- 音效系統 ---
@@ -422,21 +409,18 @@
         }
     }
 
-    // --- 【防護 2】安全全螢幕呼叫 ---
+    // --- 【防護 2】全螢幕極度安全呼叫 ---
     function safeRequestFullScreen() {
         try {
             const el = document.documentElement;
             if (el.requestFullscreen) {
                 const promise = el.requestFullscreen();
                 if (promise && typeof promise.catch === 'function') {
-                    promise.catch(e => console.log("全螢幕被阻擋(正常現象)"));
+                    promise.catch(e => {}); // 完全忽略報錯，不干擾主線程
                 }
-            } else if (el.webkitRequestFullscreen) {
-                el.webkitRequestFullscreen(); 
             }
-        } catch(e) {
-            // 完全忽略報錯，讓遊戲繼續執行
-        }
+        } catch(e) {}
+        // 確保視窗重新計算
         setTimeout(updateAppHeight, 150);
     }
 
@@ -512,6 +496,12 @@
 
     // --- 主渲染迴圈 ---
     function animate() {
+        // 如果高度不小心跑掉，在這裡每幀持續校正
+        if(window.innerHeight !== lastHeight) {
+            lastHeight = window.innerHeight;
+            updateAppHeight();
+        }
+
         if (gameState !== 'playing') {
             clock.getDelta(); 
             renderer.render(scene, camera);
