@@ -6,21 +6,38 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.41 (中置低視角 FPV)</title>
+    <title>無人機足球 v0.42 (雙視角與防遮擋)</title>
     <style>
-        /* --- 基礎設定 --- */
-        :root { --app-height: 100vh; }
+        /* =========================================
+           1. 基礎重置與防呆鎖死
+           ========================================= */
         * { box-sizing: border-box; }
         body, html { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            background: #05050a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+            margin: 0; padding: 0; 
+            width: 100%; height: 100%; 
+            background: #05050a; color: white; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            overflow: hidden; 
+            touch-action: none; 
+            user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
         }
         
-        #game-container { position: relative; width: 100vw; height: var(--app-height); overflow: hidden; }
-        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; outline: none; }
+        #game-container { 
+            position: relative; 
+            width: 100vw; height: 100vh; 
+            overflow: hidden; 
+        }
+        
+        canvas { 
+            position: absolute; top: 0; left: 0; 
+            width: 100%; height: 100%; z-index: 1; outline: none; 
+        }
 
-        .btn { cursor: pointer; pointer-events: auto; font-weight: bold; border: none; outline: none; transition: 0.2s transform; -webkit-tap-highlight-color: transparent; }
+        .btn { 
+            cursor: pointer; pointer-events: auto; 
+            font-weight: bold; border: none; outline: none; 
+            transition: 0.2s transform; -webkit-tap-highlight-color: transparent;
+        }
         .btn:active { transform: scale(0.95); }
 
         @media (hover: hover) {
@@ -28,10 +45,12 @@
             .btn-3v3:hover { background: #44ff44 !important; box-shadow: 0 0 20px #44ff44 !important; }
             .btn-practice:hover { background: rgba(255,255,255,0.1) !important; border-color: #55ccff !important; color: #55ccff !important; }
             .btn-restart:hover { transform: scale(1.05) !important; }
-            #btn-back:hover { background: rgba(255,255,255,0.2) !important; }
+            #btn-back:hover, #btn-toggle-view:hover { background: rgba(255,255,255,0.2) !important; }
         }
 
-        /* --- 各大畫面圖層 --- */
+        /* =========================================
+           2. 各大畫面圖層
+           ========================================= */
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; }
         #start-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(5,5,10,0.95); }
         #gameover-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -55,6 +74,13 @@
         /* --- 遊戲中 UI --- */
         #btn-back {
             position: absolute; top: max(15px, env(safe-area-inset-top, 15px)); left: max(15px, env(safe-area-inset-left, 15px));
+            background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(255, 255, 255, 0.2); color: white; padding: 8px 15px; border-radius: 8px;
+            font-size: 14px; display: none; align-items: center; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        /* 視角切換按鈕 (右上角) */
+        #btn-toggle-view {
+            position: absolute; top: max(15px, env(safe-area-inset-top, 15px)); right: max(15px, env(safe-area-inset-right, 15px));
             background: rgba(0, 0, 0, 0.7); border: 1px solid rgba(255, 255, 255, 0.2); color: white; padding: 8px 15px; border-radius: 8px;
             font-size: 14px; display: none; align-items: center; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);
         }
@@ -116,6 +142,7 @@
 
     <div id="ui-layer">
         <button id="btn-back" class="btn">◀ 返回主選單</button>
+        <button id="btn-toggle-view" class="btn">📷 切換視角</button>
 
         <div id="fpv-scoreboard">
             <div class="fpv-score-row">
@@ -135,13 +162,13 @@
 
         <div id="joy-left" class="touch-ctrl"><div id="knob-left" class="touch-knob"></div></div>
         <div id="joy-right" class="touch-ctrl"><div id="knob-right" class="touch-knob"></div></div>
-        <div id="pc-hint">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移</div>
+        <div id="pc-hint">【美國手 Mode 2】 左手 WASD：升降與轉向 | 右手 方向鍵：推飛平移 | 按 C 切換視角</div>
     </div>
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">✅ 視角已修正為中置低視角 FPV</div>
-        <div class="subtitle">v0.41 | 中置低視角 FPV</div>
+        <div class="mobile-hint">✅ 已實裝雙視角切換與防遮擋半透明球門</div>
+        <div class="subtitle">v0.42 | 雙視角與戰術防遮擋</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -222,6 +249,11 @@
         'hard': { speedBase: 0.55, speedBurst: 0.8, sweepRange: 25, lerpFactor: 0.4 }
     };
     let currentDifficulty = 'hard';
+    
+    // 【新增】視角模式變數
+    let currentCameraMode = 'pilot'; // 'pilot' 或 'drone'
+    // 用來平滑移動相機視線焦點的虛擬向量
+    window.camLookAtTarget = new THREE.Vector3(0, 100, 0);
 
     const canvas = document.getElementById('game-canvas');
     let scene, camera, renderer, clock;
@@ -332,12 +364,10 @@
         scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x05050a, 600, 2500);
 
-        // --- 【修改】修正為中置低視角 FPV ---
+        // 初始相機設定 (後續會在 animate 中被接管)
         camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 3000);
-        // 位置：站在己方底線外，移回中線 (z=0)，高度大幅降低至 80 (FPV 感)
-        camera.position.set(-PITCH.w / 2 - 30, 80, 0); 
-        // 焦點：維持盯著對方的球門中心
-        camera.lookAt(GOAL_X, GOAL_Y, 0); 
+        camera.position.set(-PITCH.w / 2 - 100, 240, 0); 
+        camera.lookAt(0, 100, 0); 
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -377,8 +407,17 @@
         netMesh.position.y = PITCH.h / 2;
         scene.add(netMesh);
 
-        const createGoal = (pos, colorHex) => {
-            const mesh = new THREE.Mesh(new THREE.TorusGeometry(TORUS_RADIUS, GOAL_TUBE_RADIUS, 16, 100), new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 2.0 }));
+        // --- 【修改】加入半透明參數的球門生成器 ---
+        const createGoal = (pos, colorHex, isOwnGoal) => {
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: colorHex, 
+                emissive: colorHex, 
+                emissiveIntensity: 2.0,
+                transparent: isOwnGoal,          // 若是自己的球門開啟透明
+                opacity: isOwnGoal ? 0.2 : 1.0,  // 20% 透明度防擋視線
+                depthWrite: !isOwnGoal           // 防止透明渲染破圖
+            });
+            const mesh = new THREE.Mesh(new THREE.TorusGeometry(TORUS_RADIUS, GOAL_TUBE_RADIUS, 16, 100), mat);
             mesh.position.copy(pos);
             mesh.rotation.y = Math.PI / 2;
             scene.add(mesh);
@@ -386,14 +425,15 @@
             light.position.copy(pos);
             scene.add(light);
         };
-        createGoal(new THREE.Vector3(-GOAL_X, GOAL_Y, 0), 0xff3333);
-        createGoal(new THREE.Vector3(GOAL_X, GOAL_Y, 0), 0x3333ff);
+        // 紅方(玩家)球門設定為半透明
+        createGoal(new THREE.Vector3(-GOAL_X, GOAL_Y, 0), 0xff3333, true);
+        createGoal(new THREE.Vector3(GOAL_X, GOAL_Y, 0), 0x3333ff, false);
 
         clock = new THREE.Clock();
     }
 
     // ==========================================
-    // 3. 遊戲邏輯與迴圈
+    // 4. 物理運算與遊戲迴圈
     // ==========================================
     function updateUI() {
         document.getElementById('score-red').innerText = score.red.toString().padStart(2, '0');
@@ -510,6 +550,40 @@
             player.v.addScaledVector(new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw)).normalize(), rollInput * player.speed * dt);
         }
 
+        // --- 【新增】雙視角相機跟隨邏輯 ---
+        if (player) {
+            if (currentCameraMode === 'pilot') {
+                // 飛手視角：固定在中線後方，高度提升，平滑對齊中心
+                camera.position.lerp(new THREE.Vector3(-PITCH.w / 2 - 80, 240, 0), 0.05);
+                window.camLookAtTarget.lerp(new THREE.Vector3(0, 100, 0), 0.05);
+                camera.lookAt(window.camLookAtTarget);
+            } else if (currentCameraMode === 'drone') {
+                // 追隨視角：無人機的第三人稱越肩視角
+                const dirX = -Math.sin(player.yaw);
+                const dirZ = -Math.cos(player.yaw);
+                
+                // 相機位置設定在無人機後方 120，高度 60
+                const targetPos = new THREE.Vector3(
+                    player.p.x - dirX * 120, 
+                    player.p.y + 60, 
+                    player.p.z - dirZ * 120
+                );
+                // 避免相機穿入地板
+                targetPos.y = Math.max(30, targetPos.y);
+
+                camera.position.lerp(targetPos, 0.08);
+                
+                // 視線焦點看著無人機前方 50 的位置
+                const lookPos = new THREE.Vector3(
+                    player.p.x + dirX * 50, 
+                    player.p.y, 
+                    player.p.z + dirZ * 50
+                );
+                window.camLookAtTarget.lerp(lookPos, 0.1);
+                camera.lookAt(window.camLookAtTarget);
+            }
+        }
+
         const timeNow = performance.now();
         const goalPosRed = new THREE.Vector3(-GOAL_X, GOAL_Y, 0);
         const goalPosBlue = new THREE.Vector3(GOAL_X, GOAL_Y, 0);
@@ -594,7 +668,7 @@
     }
 
     // ==========================================
-    // 4. 流程控制與事件綁定
+    // 5. 流程控制與事件綁定
     // ==========================================
     function setDifficultyMode(level) {
         currentDifficulty = level;
@@ -604,6 +678,10 @@
         document.getElementById('btn-' + level).classList.add('active');
     }
 
+    function toggleCameraView() {
+        currentCameraMode = currentCameraMode === 'pilot' ? 'drone' : 'pilot';
+    }
+
     function startGame(mode) {
         safeRequestFullScreen();
         gameMode = mode;
@@ -611,10 +689,15 @@
         score = { red: 0, blue: 0 };
         timeLeft = 180;
         
+        // 重置視角與目標點
+        currentCameraMode = 'pilot';
+        window.camLookAtTarget.set(0, 100, 0);
+
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
         document.getElementById('fpv-scoreboard').style.display = 'block';
         document.getElementById('btn-back').style.display = 'flex'; 
+        document.getElementById('btn-toggle-view').style.display = 'flex'; 
         
         if (mode === 'practice') document.getElementById('fpv-blue-row').style.display = 'none';
         else document.getElementById('fpv-blue-row').style.display = 'flex';
@@ -647,6 +730,7 @@
         clearInterval(gameTimerId);
         document.getElementById('fpv-scoreboard').style.display = 'none';
         document.getElementById('btn-back').style.display = 'none'; 
+        document.getElementById('btn-toggle-view').style.display = 'none'; 
         document.getElementById('gameover-screen').style.display = 'flex';
         document.getElementById('final-red').innerText = score.red.toString().padStart(2, '0');
         document.getElementById('final-blue').innerText = score.blue.toString().padStart(2, '0');
@@ -666,6 +750,7 @@
         document.getElementById('gameover-screen').style.display = 'none';
         document.getElementById('fpv-scoreboard').style.display = 'none';
         document.getElementById('btn-back').style.display = 'none';
+        document.getElementById('btn-toggle-view').style.display = 'none';
         document.getElementById('start-screen').style.display = 'flex';
         
         drones.forEach(d => scene.remove(d.group));
@@ -690,8 +775,8 @@
             outObj.x = dx / maxDist; outObj.y = -dy / maxDist;
         };
 
-        zone.addEventListener('touchstart', e => { if(e.cancelable) e.preventDefault(); touchId = e.changedTouches[0].identifier; update(e.changedTouches[0]); }, {passive: false});
-        zone.addEventListener('touchmove', e => { if(e.cancelable) e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) update(t); }, {passive: false});
+        zone.addEventListener('touchstart', e => { e.preventDefault(); touchId = e.changedTouches[0].identifier; update(e.changedTouches[0]); }, {passive: false});
+        zone.addEventListener('touchmove', e => { e.preventDefault(); for(let t of e.changedTouches) if(t.identifier === touchId) update(t); }, {passive: false});
         const reset = () => { touchId = null; knob.style.transform = `translate(-50%, -50%)`; outObj.x = 0; outObj.y = 0; };
         zone.addEventListener('touchend', reset); zone.addEventListener('touchcancel', reset);
     }
@@ -703,11 +788,19 @@
         
         document.getElementById('btn-3v3').addEventListener('click', () => startGame('3v3'));
         document.getElementById('btn-practice').addEventListener('click', () => startGame('practice'));
+        
         document.getElementById('btn-back').addEventListener('click', returnToMenu);
+        document.getElementById('btn-toggle-view').addEventListener('click', toggleCameraView);
         document.getElementById('btn-restart').addEventListener('click', returnToMenu);
 
-        window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
-        window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+        window.addEventListener('keydown', e => { 
+            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; 
+            // 按 C 鍵也可切換視角
+            if(e.key.toLowerCase() === 'c' && gameState === 'playing') toggleCameraView();
+        });
+        window.addEventListener('keyup', e => { 
+            if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; 
+        });
 
         setupJoy('joy-left', 'knob-left', joyLeft);
         setupJoy('joy-right', 'knob-right', joyRight);
