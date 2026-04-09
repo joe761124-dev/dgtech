@@ -6,23 +6,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>無人機足球 v0.31 (動態真實高度鎖死)</title>
+    <title>無人機足球 v0.32 (Bug修復 & 返回鍵)</title>
     <style>
-        /* 定義動態高度變數，預設為 100vh，後續由 JS 即時覆寫 */
         :root {
             --app-height: 100vh;
         }
 
-        /* --- 基礎設定 (強制套用真實像素高度) --- */
+        /* --- 基礎設定 --- */
         body, html { 
             margin: 0; padding: 0; 
-            width: 100vw; 
-            height: var(--app-height); /* 終極解法：吃 JS 算出來的真實高度 */
+            width: 100vw; height: var(--app-height); 
             background-color: #05050a; color: white; 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             overflow: hidden; touch-action: none; overscroll-behavior: none; 
             user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
-            position: fixed; top: 0; left: 0; /* 防止任何原生的滑動回彈 */
+            position: fixed; top: 0; left: 0;
         }
         
         canvas { 
@@ -56,9 +54,37 @@
         .btn-practice { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); font-size: 16px; padding: 15px 40px; border-radius: 12px; width: 260px; }
         .mobile-hint { color: #ffaa00; font-size: 12px; margin-top: -15px; margin-bottom: 15px; opacity: 0.9; font-weight: bold; background: rgba(255,170,0,0.2); padding: 5px 15px; border-radius: 10px;}
 
-        /* --- 遊戲中 UI (FPV 視角風格) --- */
+        /* --- 遊戲中 UI --- */
+        #btn-back {
+            position: absolute;
+            top: max(15px, env(safe-area-inset-top));
+            left: max(15px, env(safe-area-inset-left));
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: bold;
+            pointer-events: auto;
+            cursor: pointer;
+            z-index: 50;
+            display: none; /* 預設隱藏，遊戲開始才顯示 */
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        #btn-back:hover { background: rgba(255, 255, 255, 0.2); }
+
         #top-bar { display: none; padding: 15px; pointer-events: none; }
-        #fpv-scoreboard { position: absolute; top: max(15px, env(safe-area-inset-top)); left: max(15px, env(safe-area-inset-left)); pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);}
+        #fpv-scoreboard { 
+            position: absolute; 
+            /* 計分板往下推 45px，讓出空間給左上角返回鍵 */
+            top: calc(max(15px, env(safe-area-inset-top)) + 45px); 
+            left: max(15px, env(safe-area-inset-left)); 
+            pointer-events: none; border: 1px solid rgba(68, 255, 68, 0.4); background: rgba(68, 255, 68, 0.05); padding: 10px 15px; border-radius: 8px; box-shadow: 0 0 15px rgba(68,255,68,0.15); font-family: 'Courier New', Courier, monospace; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+        }
         .fpv-score-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 3px; }
         .fpv-num { font-size: 22px; font-weight: bold; color: #44ff44; text-shadow: 0 0 8px #44ff44;}
         .fpv-score-red { color: #ff5555; text-shadow: 0 0 10px #ff5555;}
@@ -81,12 +107,11 @@
         .score-dash { color: rgba(255,255,255,0.3); font-weight: 300; font-size: 24px; }
         .btn-restart { background: #fff; color: #000; padding: 15px 40px; font-size: 16px; border-radius: 30px; box-shadow: 0 0 30px rgba(255,255,255,0.3); }
 
-        /* --- 虛擬搖桿 (終極 iOS 護城河配置) --- */
+        /* --- 虛擬搖桿 --- */
         .touch-ctrl { 
             position: absolute; width: 110px; height: 110px; 
             background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); 
             border-radius: 50%; pointer-events: auto; display: none; 
-            /* 使用 max() 保證搖桿至少距離底部 35px，若有 safe-area 則取其大者 */
             bottom: max(35px, env(safe-area-inset-bottom)); 
         }
         .touch-knob { position: absolute; top: 50%; left: 50%; width: 45%; height: 45%; background: rgba(255,255,255,0.6); border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,0.3); pointer-events: none;}
@@ -100,7 +125,7 @@
             .touch-ctrl { display: block; } 
             #pc-hint { display: none !important; }
             .title { font-size: 40px; }
-            #fpv-scoreboard { left: max(10px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); padding: 8px; transform: scale(0.9); transform-origin: top left;}
+            #fpv-scoreboard { left: max(10px, env(safe-area-inset-left)); top: calc(max(10px, env(safe-area-inset-top)) + 40px); padding: 8px; transform: scale(0.9); transform-origin: top left;}
         }
         @media (min-width: 851px) { #pc-hint { display: block; } }
     </style>
@@ -112,8 +137,8 @@
 
     <div id="start-screen">
         <h1 class="title">無人機<span>足球</span></h1>
-        <div class="mobile-hint">📍 蘋果 PWA 真實像素鎖定，搖桿防阻擋技術</div>
-        <div class="subtitle">v0.31 | iOS 橫向滿版高度自適應</div>
+        <div class="mobile-hint">📍 點擊開始即自動適應全螢幕</div>
+        <div class="subtitle">v0.32 | 崩潰修復與左上角返回鍵</div>
         
         <div class="diff-selector">
             <span class="diff-label">AI 難度：</span>
@@ -127,6 +152,8 @@
     </div>
 
     <div id="ui-layer">
+        <button id="btn-back" class="btn" onclick="returnToMenu()">◀ 返回主選單</button>
+
         <div id="top-bar">
             <div id="fpv-scoreboard">
                 <div class="fpv-score-row">
@@ -167,36 +194,29 @@
     </div>
 
 <script>
-    // --- 【核心修復】即時動態更新真實視窗高度 ---
+    // --- 動態高度適應 ---
     function updateAppHeight() {
-        // 抓取真實的可用內部像素高度，賦值給 CSS 變數
         const realHeight = window.innerHeight;
         document.documentElement.style.setProperty('--app-height', `${realHeight}px`);
-        
-        // 確保 3D 畫布同步更新，不會被拉伸
         if (camera && renderer) {
             camera.aspect = window.innerWidth / realHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, realHeight);
         }
     }
-    
-    // 綁定事件：不管是翻轉手機還是重置大小，都重新計算
     window.addEventListener('resize', updateAppHeight);
-    // iOS 需要一點延遲來抓取正確的橫向高度
     window.addEventListener('orientationchange', () => setTimeout(updateAppHeight, 200)); 
-    updateAppHeight(); // 初始執行一次
+    updateAppHeight(); 
 
     // --- 音效系統 ---
     const sfxScore = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.mp3');
     const sfxHit = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-metal-hit-clank-2144.mp3');
     sfxScore.volume = 0.5; sfxHit.volume = 0.4;
-
     function playSound(audioObj) {
         if(audioObj.readyState >= 2) { audioObj.currentTime = 0; audioObj.play().catch(e => {}); }
     }
 
-    // --- 遊戲常數 (FAI F9A-B 20cm 級) ---
+    // --- 遊戲常數 (FAI F9A-B 20cm) ---
     const PITCH = { w: 800, h: 300, d: 400 }; 
     const DRONE_RADIUS = 10; 
     const GOAL_INNER_RADIUS = 20; 
@@ -205,7 +225,7 @@
     const GOAL_Y = 150; 
     const GOAL_X = PITCH.w / 2 - 100; 
 
-    // --- AI 難易度設定 ---
+    // --- AI 難易度 ---
     const DIFFICULTY_SETTINGS = {
         'easy': { speedBase: 0.35, speedBurst: 0.5, sweepRange: 5, lerpFactor: 0.15 },
         'medium': { speedBase: 0.45, speedBurst: 0.65, sweepRange: 15, lerpFactor: 0.25 },
@@ -237,7 +257,7 @@
     const joyLeft = { x: 0, y: 0 };
     const joyRight = { x: 0, y: 0 };
 
-    // --- 實體類別：無人機 ---
+    // --- 實體：無人機 ---
     class Drone {
         constructor(x, y, z, colorHex, role, team) {
             this.p = new THREE.Vector3(x, y, z);
@@ -324,7 +344,6 @@
         }
     }
 
-    // --- 初始化 Three.js ---
     function initThreeJS() {
         scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x05050a, 600, 2500);
@@ -334,7 +353,6 @@
         camera.lookAt(-100, 100, 0); 
 
         renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
-        // 使用真實高度來初始化
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setClearColor(0x000000, 0);
@@ -395,13 +413,22 @@
         }
     }
 
+    // --- 安全觸發全螢幕防死機機制 ---
     function requestFullScreen() {
         const el = document.documentElement;
         const requestFS = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        
         if (requestFS) {
-            requestFS.call(el).catch(()=>{});
+            try {
+                // 這裡必須加上 try-catch 防護，因為 webkitRequestFullscreen 不回傳 Promise 會導致 .catch() 報錯死機
+                const promise = requestFS.call(el);
+                if (promise && promise.catch) {
+                    promise.catch(e => console.log("全螢幕請求被阻擋", e));
+                }
+            } catch(e) {
+                console.log("舊版全螢幕 API 執行", e);
+            }
         }
-        // 觸發全螢幕後強制重算一次高度
         setTimeout(updateAppHeight, 100);
     }
 
@@ -582,6 +609,7 @@
         animationFrameId = requestAnimationFrame(animate);
     }
 
+    // --- 遊戲流程控制 ---
     function startGame(mode) {
         requestFullScreen();
         gameMode = mode;
@@ -592,10 +620,12 @@
         document.getElementById('start-screen').style.display = 'none';
         document.getElementById('gameover-screen').style.display = 'none';
         document.getElementById('top-bar').style.display = 'block';
+        document.getElementById('btn-back').style.display = 'flex'; // 顯示返回鍵
         
         if (mode === 'practice') document.getElementById('fpv-blue-row').style.display = 'none';
         else document.getElementById('fpv-blue-row').style.display = 'flex';
 
+        // 清除場上殘留無人機
         drones.forEach(d => scene.remove(d.group));
         drones = [];
 
@@ -623,6 +653,7 @@
         gameState = 'gameover';
         clearInterval(gameTimerId);
         document.getElementById('top-bar').style.display = 'none';
+        document.getElementById('btn-back').style.display = 'none'; // 隱藏返回鍵
         document.getElementById('gameover-screen').style.display = 'flex';
         document.getElementById('final-red').innerText = score.red.toString().padStart(2, '0');
         document.getElementById('final-blue').innerText = score.blue.toString().padStart(2, '0');
@@ -638,8 +669,16 @@
 
     function returnToMenu() {
         gameState = 'menu';
+        clearInterval(gameTimerId); // 清除倒數計時
         document.getElementById('gameover-screen').style.display = 'none';
+        document.getElementById('top-bar').style.display = 'none';
+        document.getElementById('btn-back').style.display = 'none';
         document.getElementById('start-screen').style.display = 'flex';
+        
+        // 返回主選單時清除場景中的無人機
+        drones.forEach(d => scene.remove(d.group));
+        drones = [];
+        player = null;
     }
 
     // --- 搖桿與事件綁定 ---
